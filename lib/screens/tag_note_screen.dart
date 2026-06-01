@@ -359,8 +359,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                   isDamage ? AppColors.onTertiaryContainer : AppColors.primary;
               return GestureDetector(
                 onTap: () => setState(() => _selectedCat = cat),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
+                child: Container(
                   decoration: BoxDecoration(
                     color: active
                         ? activeColor.withOpacity(0.1)
@@ -433,7 +432,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('VOICE NOTE',
+            const Text('VOICE MEMO + NOTES',
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,

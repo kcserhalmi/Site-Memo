@@ -231,53 +231,48 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Tools + thickness
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // Tools + thickness — wrapped to prevent overflow on small screens
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Row(children: [
-                        _ToolBtn(
-                            icon: Icons.draw_outlined, label: 'PEN',
-                            selected: _tool == _Tool.freehand,
-                            onTap: () => setState(() => _tool = _Tool.freehand)),
-                        const SizedBox(width: 8),
-                        _ToolBtn(
-                            icon: Icons.horizontal_rule, label: 'LINE',
-                            selected: _tool == _Tool.line,
-                            onTap: () => setState(() => _tool = _Tool.line)),
-                        const SizedBox(width: 8),
-                        _ToolBtn(
-                            icon: Icons.arrow_forward, label: 'ARROW',
-                            selected: _tool == _Tool.arrow,
-                            onTap: () => setState(() => _tool = _Tool.arrow)),
-                      ]),
-                      // Thickness dots
-                      Row(
-                        children: [2.0, 4.0, 7.0].map((w) {
-                          final sel = _strokeWidth == w;
-                          return GestureDetector(
-                            onTap: () => setState(() => _strokeWidth = w),
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 8),
-                              width: 32, height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: sel
-                                    ? AppColors.primaryContainer.withOpacity(0.2)
-                                    : Colors.transparent,
-                                border: Border.all(
-                                    color: sel
-                                        ? AppColors.primaryContainer
-                                        : AppColors.outlineVariant),
-                              ),
-                              child: Center(
-                                child: Container(
-                                    height: w, width: 16, color: _color),
-                              ),
+                      _ToolBtn(
+                          icon: Icons.draw_outlined, label: 'PEN',
+                          selected: _tool == _Tool.freehand,
+                          onTap: () => setState(() => _tool = _Tool.freehand)),
+                      _ToolBtn(
+                          icon: Icons.horizontal_rule, label: 'LINE',
+                          selected: _tool == _Tool.line,
+                          onTap: () => setState(() => _tool = _Tool.line)),
+                      _ToolBtn(
+                          icon: Icons.arrow_forward, label: 'ARROW',
+                          selected: _tool == _Tool.arrow,
+                          onTap: () => setState(() => _tool = _Tool.arrow)),
+                      // Thickness dots inline
+                      ...[2.0, 4.0, 7.0].map((w) {
+                        final sel = _strokeWidth == w;
+                        return GestureDetector(
+                          onTap: () => setState(() => _strokeWidth = w),
+                          child: Container(
+                            width: 32, height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: sel
+                                  ? AppColors.primaryContainer.withOpacity(0.2)
+                                  : Colors.transparent,
+                              border: Border.all(
+                                  color: sel
+                                      ? AppColors.primaryContainer
+                                      : AppColors.outlineVariant),
                             ),
-                          );
-                        }).toList(),
-                      ),
+                            child: Center(
+                              child: Container(
+                                  height: w, width: 16, color: _color),
+                            ),
+                          ),
+                        );
+                      }),
                     ],
                   ),
                   const SizedBox(height: 12),
