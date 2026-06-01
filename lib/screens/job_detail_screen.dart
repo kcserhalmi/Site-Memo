@@ -612,6 +612,11 @@ class _InspectionCard extends StatelessWidget {
                   Row(
                     children: [
                       _Pill('${inspection.photoCount} photos', AppColors.outline),
+                      if (inspection.flaggedCount > 0) ...[
+                        const SizedBox(width: 6),
+                        _Pill('${inspection.flaggedCount} flagged',
+                            AppColors.onTertiaryContainer),
+                      ],
                     ],
                   ),
                 ],

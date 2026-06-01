@@ -23,16 +23,20 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _load() async {
-    final name = await AppPrefs.getInspectorName();
-    final at = await AppPrefs.getAutoTranscribe();
-    final hq = await AppPrefs.getHighQuality();
-    if (mounted) {
-      setState(() {
-        _nameCtrl.text = name;
-        _autoTranscribe = at;
-        _highQuality = hq;
-        _loaded = true;
-      });
+    try {
+      final name = await AppPrefs.getInspectorName();
+      final at = await AppPrefs.getAutoTranscribe();
+      final hq = await AppPrefs.getHighQuality();
+      if (mounted) {
+        setState(() {
+          _nameCtrl.text = name;
+          _autoTranscribe = at;
+          _highQuality = hq;
+          _loaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
     }
   }
 
@@ -115,10 +119,10 @@ class _AccountScreenState extends State<AccountScreen> {
                 style: const TextStyle(
                     color: AppColors.onSurface, fontSize: 15),
                 cursorColor: AppColors.primary,
-                onChanged: (v) => setState(() {}),
-                onSubmitted: (v) => AppPrefs.setInspectorName(v.trim()),
-                onEditingComplete: () =>
-                    AppPrefs.setInspectorName(_nameCtrl.text.trim()),
+                onChanged: (v) {
+                  setState(() {});
+                  AppPrefs.setInspectorName(v.trim());
+                },
                 decoration: const InputDecoration(
                   hintText: 'Your name (auto-fills on inspections)',
                   hintStyle:

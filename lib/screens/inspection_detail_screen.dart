@@ -417,6 +417,13 @@ class _NotesCard extends StatelessWidget {
                         .read<AppProvider>()
                         .updateNotes(jobId, insp.id, ctrl.text.trim());
                     if (ctx.mounted) Navigator.pop(ctx);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Notes saved'),
+                        backgroundColor: AppColors.surfaceContainerHigh,
+                        duration: Duration(seconds: 2),
+                      ));
+                    }
                   },
                   child: const Text('SAVE',
                       style: TextStyle(

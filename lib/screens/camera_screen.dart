@@ -8,6 +8,7 @@ import '../models/inspection_photo.dart';
 import '../models/job.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
 import '../widgets/glass_card.dart';
 import 'tag_note_screen.dart';
@@ -131,8 +132,12 @@ class _CameraScreenState extends State<CameraScreen>
         file = await _ctrl!.takePicture();
       } else {
         final src = _isDesktop ? ImageSource.gallery : ImageSource.camera;
-        file = await ImagePicker()
-            .pickImage(source: src, imageQuality: 88, maxWidth: 2048);
+        final hq = await AppPrefs.getHighQuality();
+        file = await ImagePicker().pickImage(
+          source: src,
+          imageQuality: hq ? 100 : 82,
+          maxWidth: hq ? 4096 : 2048,
+        );
       }
       if (file == null || !mounted) return;
 
