@@ -163,9 +163,13 @@ class _CameraScreenState extends State<CameraScreen>
       } else {
         // ── REVIEW: fully release camera before navigating on iOS ───────
         if (_ctrl != null) {
-          await _ctrl!.dispose();
+          // Null out and hide preview BEFORE disposing to avoid
+          // CameraPreview building against a disposed controller
+          final ctrlToDispose = _ctrl;
           _ctrl = null;
           if (mounted) setState(() => _cameraReady = false);
+          await Future.microtask(() {}); // let the frame render without camera
+          try { await ctrlToDispose!.dispose(); } catch (_) {}
         }
         // ── Open tag + voice note screen ────────────────────────────────
         await Navigator.push(
