@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
+// Single AnimationController drives all bars via math offsets.
+// Previously used barCount individual controllers — too heavy for iOS.
 class WaveformVisualizer extends StatefulWidget {
   final bool isActive;
   final int barCount;
@@ -21,54 +23,35 @@ class WaveformVisualizer extends StatefulWidget {
 }
 
 class _WaveformVisualizerState extends State<WaveformVisualizer>
-    with TickerProviderStateMixin {
-  late List<AnimationController> _controllers;
-  late List<Animation<double>> _animations;
-  final _rng = Random();
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _build();
-  }
-
-  void _build() {
-    _controllers = List.generate(widget.barCount, (i) {
-      final ms = 400 + _rng.nextInt(500);
-      return AnimationController(
-          vsync: this, duration: Duration(milliseconds: ms));
-    });
-    _animations = _controllers
-        .map((c) => Tween<double>(begin: 3, end: widget.height * 0.85)
-            .animate(CurvedAnimation(parent: c, curve: Curves.easeInOut)))
-        .toList();
-    if (widget.isActive) {
-      for (final c in _controllers) {
-        c.repeat(reverse: true);
-      }
-    }
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.isActive) _ctrl.repeat();
   }
 
   @override
   void didUpdateWidget(WaveformVisualizer old) {
     super.didUpdateWidget(old);
     if (widget.isActive != old.isActive) {
-      for (final c in _controllers) {
-        if (widget.isActive) {
-          c.repeat(reverse: true);
-        } else {
-          c.stop();
-          c.animateTo(0.15);
-        }
+      if (widget.isActive) {
+        _ctrl.repeat();
+      } else {
+        _ctrl.stop();
+        _ctrl.animateTo(0);
       }
     }
   }
 
   @override
   void dispose() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
+    _ctrl.dispose();
     super.dispose();
   }
 
@@ -77,23 +60,32 @@ class _WaveformVisualizerState extends State<WaveformVisualizer>
     final color = widget.color ?? AppColors.primary;
     return SizedBox(
       height: widget.height,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: List.generate(widget.barCount, (i) {
-          return AnimatedBuilder(
-            animation: _animations[i],
-            builder: (_, __) => Container(
-              width: 3,
-              height: widget.isActive ? _animations[i].value : 4,
-              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (_, __) {
+          final t = _ctrl.value * 2 * pi;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: List.generate(widget.barCount, (i) {
+              final phase = i * (2 * pi / widget.barCount);
+              final normalized = widget.isActive
+                  ? (sin(t + phase) + 1) / 2
+                  : 0.15;
+              final h = (normalized * widget.height * 0.85)
+                  .clamp(3.0, widget.height * 0.85);
+              return Container(
+                width: 3,
+                height: h,
+                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              );
+            }),
           );
-        }),
+        },
       ),
     );
   }

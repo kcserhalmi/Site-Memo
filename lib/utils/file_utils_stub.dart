@@ -1,10 +1,16 @@
 // Web stub — dart:io is not available in browser
 import 'package:flutter/material.dart';
 
-Widget appImage(String path, {BoxFit fit = BoxFit.cover, Widget? fallback}) {
+Widget appImage(String path,
+    {BoxFit fit = BoxFit.cover,
+    Widget? fallback,
+    int? cacheWidth,
+    int? cacheHeight}) {
   return Image.network(
     path,
     fit: fit,
+    cacheWidth: cacheWidth,
+    cacheHeight: cacheHeight,
     errorBuilder: (_, __, ___) =>
         fallback ??
         Container(

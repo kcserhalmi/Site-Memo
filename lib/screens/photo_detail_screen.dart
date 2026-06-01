@@ -328,8 +328,9 @@ class _PhotoPageState extends State<_PhotoPage> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
 
-  final _recorder = AudioRecorder();
-  final _speech = SpeechToText();
+  // Lazy — only created when user taps the mic
+  AudioRecorder? _recorder;
+  SpeechToText? _speech;
   bool _speechAvail = false;
   bool _isRecording = false;
   String _liveTranscription = '';
@@ -349,14 +350,17 @@ class _PhotoPageState extends State<_PhotoPage> {
         });
       }
     });
-    _initSpeech();
   }
 
-  Future<void> _initSpeech() async {
-    try {
-      _speechAvail = await _speech.initialize(
-          onError: (_) {}, onStatus: (_) {});
-    } catch (_) {}
+  Future<void> _ensureRecorder() async {
+    _recorder ??= AudioRecorder();
+    if (_speech == null) {
+      _speech = SpeechToText();
+      try {
+        _speechAvail = await _speech!.initialize(
+            onError: (_) {}, onStatus: (_) {});
+      } catch (_) {}
+    }
   }
 
   Future<void> _togglePlay() async {
@@ -372,10 +376,8 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   Future<void> _toggleRecord() async {
     if (_isRecording) {
-      final path = await _recorder.stop();
-      try {
-        await _speech.stop();
-      } catch (_) {}
+      final path = await _recorder!.stop();
+      try { await _speech!.stop(); } catch (_) {}
       setState(() => _isRecording = false);
       if (path != null && mounted) {
         final p = widget.photo;
@@ -385,13 +387,14 @@ class _PhotoPageState extends State<_PhotoPage> {
         setState(() {});
       }
     } else {
-      final hasPermission = await _recorder.hasPermission();
+      await _ensureRecorder();
+      final hasPermission = await _recorder!.hasPermission();
       if (!hasPermission) return;
       final recordPath = kIsWeb
           ? 'voice_${DateTime.now().millisecondsSinceEpoch}.webm'
           : '${(await getApplicationDocumentsDirectory()).path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
       try {
-        await _recorder.start(
+        await _recorder!.start(
             const RecordConfig(encoder: AudioEncoder.aacLc),
             path: recordPath);
       } catch (_) {
@@ -399,7 +402,7 @@ class _PhotoPageState extends State<_PhotoPage> {
       }
       if (_speechAvail) {
         try {
-          await _speech.listen(
+          await _speech!.listen(
             onResult: (r) =>
                 setState(() => _liveTranscription = r.recognizedWords),
             listenOptions: SpeechListenOptions(
@@ -417,10 +420,8 @@ class _PhotoPageState extends State<_PhotoPage> {
   @override
   void dispose() {
     _player.dispose();
-    _recorder.dispose();
-    try {
-      _speech.cancel();
-    } catch (_) {}
+    _recorder?.dispose();
+    try { _speech?.cancel(); } catch (_) {}
     super.dispose();
   }
 

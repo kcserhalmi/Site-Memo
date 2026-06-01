@@ -312,6 +312,7 @@ class _PhotoTile extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             appImage(photo.imagePath,
+                cacheWidth: 400,
                 fallback: Container(
                   color: AppColors.surfaceContainerHigh,
                   child:

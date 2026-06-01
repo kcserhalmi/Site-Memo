@@ -3,7 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-Widget appImage(String path, {BoxFit fit = BoxFit.cover, Widget? fallback}) {
+Widget appImage(String path,
+    {BoxFit fit = BoxFit.cover,
+    Widget? fallback,
+    int? cacheWidth,
+    int? cacheHeight}) {
   if (!File(path).existsSync()) {
     return fallback ??
         Container(
@@ -14,6 +18,8 @@ Widget appImage(String path, {BoxFit fit = BoxFit.cover, Widget? fallback}) {
   return Image.file(
     File(path),
     fit: fit,
+    cacheWidth: cacheWidth,
+    cacheHeight: cacheHeight,
     errorBuilder: (_, __, ___) =>
         fallback ??
         Container(
