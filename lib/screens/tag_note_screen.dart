@@ -3,6 +3,7 @@ import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../models/inspection_photo.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
@@ -48,6 +49,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   final _captionCtrl = TextEditingController();
   final _transcriptionCtrl = TextEditingController();
   final _recorder = AudioRecorder();
+  final _speech = SpeechToText();
+  bool _speechAvail = false;
   bool _isRecording = false;
   String? _audioPath;
   bool _isSaving = false;
@@ -57,7 +60,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   void initState() {
     super.initState();
     _selectedCat = widget.initialCategory;
-    // Speech init moved to first mic tap — don't request mic on screen open
+    // Init speech in background — non-blocking so screen loads instantly
+    _initSpeechBackground();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AppProvider>();
       final job = provider.jobs.firstWhere(
@@ -72,17 +76,28 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     });
   }
 
+  void _initSpeechBackground() {
+    Future.microtask(() async {
+      try {
+        final avail = await _speech.initialize(
+          onError: (_) {},
+          onStatus: (_) {},
+        );
+        if (mounted) setState(() => _speechAvail = avail);
+      } catch (_) {}
+    });
+  }
+
   Future<void> _toggleRecord() async {
     if (_isRecording) {
-      try {
-        _audioPath = await _recorder.stop();
-      } catch (_) {}
+      try { _audioPath = await _recorder.stop(); } catch (_) {}
+      try { await _speech.stop(); } catch (_) {}
       setState(() { _isRecording = false; _recordSeconds = 0; });
     } else {
       try {
         final hasPermission = await _recorder.hasPermission();
         if (!hasPermission) {
-          _showSnack('Allow microphone access in Settings to record audio.');
+          _showSnack('Allow microphone access in Settings to record.');
           return;
         }
         final path = await getAudioRecordPath();
@@ -90,8 +105,26 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
           const RecordConfig(encoder: AudioEncoder.aacLc),
           path: path,
         );
+        // Start speech recognition if available
+        if (_speechAvail) {
+          try {
+            final autoTranscribe = await AppPrefs.getAutoTranscribe();
+            if (autoTranscribe) {
+              await _speech.listen(
+                onResult: (r) {
+                  if (mounted && r.recognizedWords.isNotEmpty) {
+                    setState(() => _transcriptionCtrl.text = r.recognizedWords);
+                  }
+                },
+                listenOptions: SpeechListenOptions(
+                  cancelOnError: false,
+                  partialResults: true,
+                ),
+              );
+            }
+          } catch (_) {}
+        }
         setState(() { _isRecording = true; _recordSeconds = 0; });
-        // Tick counter while recording
         _tickRecording();
       } catch (e) {
         _showSnack('Could not start recording.');
@@ -206,6 +239,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     _recorder.dispose();
     _captionCtrl.dispose();
     _transcriptionCtrl.dispose();
+    try { _speech.cancel(); } catch (_) {}
     super.dispose();
   }
 
@@ -528,8 +562,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                   maxLines: 3,
                   decoration: InputDecoration(
                     hintText: _isRecording
-                        ? 'Recording… add notes here'
-                        : 'Add notes about this recording…',
+                        ? (_speechAvail ? 'Listening… speak now' : 'Recording… type notes here')
+                        : 'Edit or add notes…',
                     hintStyle: const TextStyle(
                         color: AppColors.outline,
                         fontStyle: FontStyle.italic,
