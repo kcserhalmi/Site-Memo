@@ -5,6 +5,7 @@ class InspectionPhoto {
   String imagePath; // mutable so annotation can replace it
   String? voiceNotePath;
   String? transcription;
+  String? caption;
   String category;
   bool isFlagged;
   final DateTime timestamp;
@@ -16,6 +17,7 @@ class InspectionPhoto {
     required this.imagePath,
     this.voiceNotePath,
     this.transcription,
+    this.caption,
     this.category = 'UNTAGGED',
     this.isFlagged = false,
     required this.timestamp,
@@ -28,6 +30,7 @@ class InspectionPhoto {
         'imagePath': imagePath,
         'voiceNotePath': voiceNotePath,
         'transcription': transcription,
+        'caption': caption,
         'category': category,
         'isFlagged': isFlagged,
         'timestamp': timestamp.toIso8601String(),
@@ -41,6 +44,7 @@ class InspectionPhoto {
         imagePath: json['imagePath'] as String,
         voiceNotePath: json['voiceNotePath'] as String?,
         transcription: json['transcription'] as String?,
+        caption: json['caption'] as String?,
         category: json['category'] as String? ?? 'UNTAGGED',
         isFlagged: json['isFlagged'] as bool? ?? false,
         timestamp: DateTime.parse(json['timestamp'] as String),

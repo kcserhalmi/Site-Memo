@@ -220,7 +220,7 @@ class _PhotoResult extends StatelessWidget {
           context,
           MaterialPageRoute(
               builder: (_) =>
-                  PhotoDetailScreen(photo: photo, photoIndex: index)),
+                  PhotoDetailScreen(photos: [photo], initialIndex: 0)),
         ),
         child: Row(
           children: [

@@ -196,7 +196,8 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                         ),
                         itemCount: photos.length,
                         itemBuilder: (_, i) => _PhotoTile(
-                            photo: photos[i], index: i + 1),
+                            photo: photos[i], index: i,
+                            allPhotos: photos),
                       ),
               ),
             ],
@@ -209,8 +210,9 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
 
 class _PhotoTile extends StatelessWidget {
   final InspectionPhoto photo;
-  final int index;
-  const _PhotoTile({required this.photo, required this.index});
+  final int index; // 0-based index into allPhotos
+  final List<InspectionPhoto> allPhotos;
+  const _PhotoTile({required this.photo, required this.index, required this.allPhotos});
 
   Color _catColor(String cat) {
     if (cat == 'DAMAGE') return AppColors.onTertiaryContainer;
@@ -237,7 +239,7 @@ class _PhotoTile extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                       builder: (_) =>
-                          PhotoDetailScreen(photo: photo, photoIndex: index)),
+                          PhotoDetailScreen(photos: allPhotos, initialIndex: index)),
                 );
               },
             ),
@@ -301,7 +303,7 @@ class _PhotoTile extends StatelessWidget {
         context,
         MaterialPageRoute(
             builder: (_) =>
-                PhotoDetailScreen(photo: photo, photoIndex: index)),
+                PhotoDetailScreen(photos: allPhotos, initialIndex: index)),
       ),
       onLongPress: () => _showOptions(context),
       child: ClipRRect(

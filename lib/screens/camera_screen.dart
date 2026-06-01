@@ -35,6 +35,7 @@ class _CameraScreenState extends State<CameraScreen>
   int _cameraIndex = 0;
   int _catIndex = 0;
   int _burstCount = 0; // photos taken in current burst session
+  bool _burstFlash = false;
   String? _lastThumb;
 
   bool get _isDesktop {
@@ -155,7 +156,10 @@ class _CameraScreenState extends State<CameraScreen>
           timestamp: DateTime.now(),
         );
         await provider.addPhoto(site.id, insp.id, photo);
-        setState(() => _burstCount++);
+        setState(() { _burstCount++; _burstFlash = true; });
+        Future.delayed(const Duration(milliseconds: 220), () {
+          if (mounted) setState(() => _burstFlash = false);
+        });
       } else {
         // ── REVIEW: open tag + voice note screen ───────────────────────
         Navigator.push(
@@ -275,6 +279,22 @@ class _CameraScreenState extends State<CameraScreen>
         fit: StackFit.expand,
         children: [
           _buildViewfinder(),
+          // Burst save flash — green border confirming photo saved
+          if (_burstFlash)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _burstFlash ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 80),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                          color: AppColors.secondary, width: 4),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // ── Top overlay ──────────────────────────────────────────────────
           Positioned(
             top: 0, left: 0, right: 0,
@@ -491,7 +511,8 @@ class _CameraScreenState extends State<CameraScreen>
                       final last = insp.photos.last;
                       Navigator.push(context, MaterialPageRoute(
                         builder: (_) => PhotoDetailScreen(
-                          photo: last, photoIndex: insp.photos.length),
+                          photos: insp.photos,
+                          initialIndex: insp.photos.length - 1),
                       ));
                     }
                   },

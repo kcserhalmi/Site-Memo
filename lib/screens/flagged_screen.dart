@@ -92,8 +92,8 @@ class _FlaggedCard extends StatelessWidget {
           context,
           MaterialPageRoute(
               builder: (_) => PhotoDetailScreen(
-                    photo: item.photo,
-                    photoIndex: item.photoIndex,
+                    photos: [item.photo],
+                    initialIndex: 0,
                   )),
         ),
         child: Row(

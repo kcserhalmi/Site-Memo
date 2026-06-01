@@ -46,6 +46,7 @@ IconData _iconForCategory(String cat) {
 class _TagNoteScreenState extends State<TagNoteScreen> {
   List<String> _jobCategories = [];
   late String _selectedCat;
+  final _captionCtrl = TextEditingController();
   final _recorder = AudioRecorder();
   final _speech = SpeechToText();
   bool _speechAvail = false;
@@ -149,6 +150,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
       imagePath: widget.imagePath,
       voiceNotePath: _audioPath,
       transcription: finalTranscription.isNotEmpty ? finalTranscription : null,
+      caption: _captionCtrl.text.trim().isNotEmpty ? _captionCtrl.text.trim() : null,
       category: _selectedCat,
       timestamp: DateTime.now(),
     );
@@ -231,6 +233,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   @override
   void dispose() {
     _recorder.dispose();
+    _captionCtrl.dispose();
     _transcriptionCtrl.dispose();
     try {
       _speech.cancel();
@@ -253,7 +256,9 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildPhotoPreview(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
+                    _buildCaptionField(),
+                    const SizedBox(height: 20),
                     _buildCategorySection(),
                     const SizedBox(height: 24),
                     _buildVoiceNoteSection(),
@@ -329,6 +334,31 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
           width: 192,
           height: 192,
           child: appImage(widget.imagePath),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCaptionField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.5)),
+      ),
+      child: TextField(
+        controller: _captionCtrl,
+        style: const TextStyle(color: AppColors.onSurface, fontSize: 14),
+        cursorColor: AppColors.primary,
+        maxLines: 2,
+        minLines: 1,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          hintText: 'Quick label… (e.g. "Crack near window sill")',
+          hintStyle: TextStyle(color: AppColors.outline, fontSize: 13),
+          prefixIcon: Icon(Icons.label_outline, color: AppColors.outline, size: 18),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
       ),
     );

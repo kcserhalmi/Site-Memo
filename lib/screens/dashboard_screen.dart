@@ -8,9 +8,16 @@ import '../widgets/glass_card.dart';
 import 'flagged_screen.dart';
 import 'job_detail_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenAccount;
   const DashboardScreen({super.key, this.onOpenAccount});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _continueDismissed = false;
 
   void _newInspection(BuildContext context) {
     final nameCtrl = TextEditingController();
@@ -70,12 +77,38 @@ class DashboardScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _Header(onOpenAccount: onOpenAccount),
+            _Header(onOpenAccount: widget.onOpenAccount),
             Expanded(
               child: Consumer<AppProvider>(
                 builder: (_, p, __) => ListView(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                   children: [
+                    // Continue last inspection card
+                    if (!_continueDismissed) Builder(builder: (ctx) {
+                      // Find most recent inspection from today with photos
+                      final today = DateTime.now();
+                      for (final job in p.activeJobs) {
+                        for (final insp in [...job.inspections]
+                            ..sort((a, b) => b.date.compareTo(a.date))) {
+                          final sameDay = insp.date.year == today.year &&
+                              insp.date.month == today.month &&
+                              insp.date.day == today.day;
+                          if (sameDay && insp.photos.isNotEmpty) {
+                            return _ContinueCard(
+                              siteName: job.name,
+                              inspectionTitle: insp.title,
+                              photoCount: insp.photoCount,
+                              onContinue: () => Navigator.push(ctx,
+                                  MaterialPageRoute(
+                                      builder: (_) => JobDetailScreen(job: job))),
+                              onDismiss: () =>
+                                  setState(() => _continueDismissed = true),
+                            );
+                          }
+                        }
+                      }
+                      return const SizedBox.shrink();
+                    }),
                     // Flagged banner — only when there are flagged photos
                     Builder(builder: (ctx) {
                       final totalFlagged = p.jobs.fold<int>(0, (sum, j) =>
@@ -453,6 +486,102 @@ class _JobCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ContinueCard extends StatelessWidget {
+  final String siteName;
+  final String inspectionTitle;
+  final int photoCount;
+  final VoidCallback onContinue;
+  final VoidCallback onDismiss;
+
+  const _ContinueCard({
+    required this.siteName,
+    required this.inspectionTitle,
+    required this.photoCount,
+    required this.onContinue,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          // Tap area
+          Expanded(
+            child: GestureDetector(
+              onTap: onContinue,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.play_arrow,
+                          color: AppColors.primaryFixedDim, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('CONTINUE TODAY',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryFixedDim,
+                                  letterSpacing: 0.5)),
+                          const SizedBox(height: 2),
+                          Text(inspectionTitle,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurface),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Text('$siteName  ·  $photoCount photos',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.onSurfaceVariant),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right,
+                        color: AppColors.outline, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Dismiss button
+          GestureDetector(
+            onTap: onDismiss,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Icon(Icons.close,
+                  color: AppColors.outline.withOpacity(0.6), size: 16),
+            ),
+          ),
+        ],
       ),
     );
   }
