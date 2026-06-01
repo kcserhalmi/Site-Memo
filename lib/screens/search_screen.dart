@@ -4,6 +4,7 @@ import '../models/inspection_photo.dart';
 import '../models/job.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/file_utils.dart';
 import '../widgets/glass_card.dart';
 import 'photo_detail_screen.dart';
 import 'job_detail_screen.dart';
@@ -88,7 +89,8 @@ class _SearchScreenState extends State<SearchScreen> {
                         if (photos.isNotEmpty) ...[
                           _SectionHeader('PHOTOS (${photos.length})'),
                           ...photos.map((r) => _PhotoResult(
-                              photo: r.$1, index: r.$2)),
+                              photo: r.$1, index: r.$2,
+                              siteName: r.$3, inspectionTitle: r.$4)),
                         ],
                         if (jobs.isEmpty && photos.isEmpty)
                           const Padding(
@@ -116,17 +118,19 @@ class _SearchScreenState extends State<SearchScreen> {
     }).toList();
   }
 
-  List<(InspectionPhoto, int)> _filterPhotos(List<Job> jobs) {
+  // Returns (photo, photoIndex, siteName, inspectionTitle)
+  List<(InspectionPhoto, int, String, String)> _filterPhotos(List<Job> jobs) {
     if (_query.isEmpty) return [];
-    final results = <(InspectionPhoto, int)>[];
+    final results = <(InspectionPhoto, int, String, String)>[];
     for (final job in jobs) {
       for (final insp in job.inspections) {
         for (int i = 0; i < insp.photos.length; i++) {
           final p = insp.photos[i];
           if ((p.transcription?.toLowerCase().contains(_query) ?? false) ||
               p.category.toLowerCase().contains(_query) ||
-              insp.title.toLowerCase().contains(_query)) {
-            results.add((p, i + 1));
+              insp.title.toLowerCase().contains(_query) ||
+              job.name.toLowerCase().contains(_query)) {
+            results.add((p, i + 1, job.name, insp.title));
           }
         }
       }
@@ -199,7 +203,13 @@ class _JobResult extends StatelessWidget {
 class _PhotoResult extends StatelessWidget {
   final InspectionPhoto photo;
   final int index;
-  const _PhotoResult({required this.photo, required this.index});
+  final String siteName;
+  final String inspectionTitle;
+  const _PhotoResult(
+      {required this.photo,
+      required this.index,
+      required this.siteName,
+      required this.inspectionTitle});
 
   @override
   Widget build(BuildContext context) {
@@ -214,38 +224,75 @@ class _PhotoResult extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                color: AppColors.surfaceContainerHigh,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: photo.imagePath.isNotEmpty
+                    ? appImage(photo.imagePath, fit: BoxFit.cover,
+                        fallback: Container(
+                            color: AppColors.surfaceContainerHigh,
+                            child: const Icon(Icons.image,
+                                color: AppColors.outline)))
+                    : Container(
+                        color: AppColors.surfaceContainerHigh,
+                        child: const Icon(Icons.image,
+                            color: AppColors.outline)),
               ),
-              child: const Icon(Icons.image, color: AppColors.outline),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Parent context — site › inspection
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined,
+                          size: 10, color: AppColors.outline),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: Text(
+                          '$siteName  ›  $inspectionTitle',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.outline,
+                              letterSpacing: 0.1),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  // Location tag
                   Text(photo.category,
                       style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppColors.primary,
-                          letterSpacing: 0.4)),
-                  if (photo.transcription != null)
+                          letterSpacing: 0.3)),
+                  if (photo.transcription != null &&
+                      photo.transcription!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       photo.transcription!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant),
+                          fontSize: 12, color: AppColors.onSurfaceVariant),
                     ),
+                  ],
                 ],
               ),
             ),
+            if (photo.isFlagged)
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Icon(Icons.flag,
+                    color: AppColors.onTertiaryContainer, size: 16),
+              ),
           ],
         ),
       ),

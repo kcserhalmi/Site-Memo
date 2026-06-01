@@ -107,6 +107,63 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     super.dispose();
   }
 
+  void _editTranscription(InspectionPhoto photo) {
+    final ctrl = TextEditingController(text: photo.transcription ?? '');
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Edit Transcription',
+            style: TextStyle(
+                color: AppColors.onSurface, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 5,
+          style: const TextStyle(
+              color: AppColors.onSurface, fontSize: 14, height: 1.5),
+          cursorColor: AppColors.primary,
+          decoration: const InputDecoration(
+            hintText: 'Type or correct transcription…',
+            hintStyle: TextStyle(color: AppColors.outline, fontSize: 13),
+            filled: true,
+            fillColor: AppColors.surfaceContainer,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('CANCEL',
+                style: TextStyle(color: AppColors.outline, fontSize: 12)),
+          ),
+          TextButton(
+            onPressed: () async {
+              await context.read<AppProvider>().updatePhotoVoiceNote(
+                    photo.jobId,
+                    photo.inspectionId,
+                    photo.id,
+                    photo.voiceNotePath,
+                    ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : null,
+                  );
+              if (dCtx.mounted) Navigator.pop(dCtx);
+              if (mounted) setState(() {});
+            },
+            child: const Text('SAVE',
+                style: TextStyle(
+                    color: AppColors.primaryContainer,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirmDelete(BuildContext context) {
     showDialog(
       context: context,
@@ -511,8 +568,23 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                       fontWeight: FontWeight.w700,
                       color: AppColors.outline,
                       letterSpacing: 0.5)),
-              Icon(Icons.graphic_eq,
-                  color: AppColors.outline.withOpacity(0.6), size: 18),
+              GestureDetector(
+                onTap: () => _editTranscription(photo),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_outlined,
+                        color: AppColors.outline, size: 14),
+                    SizedBox(width: 4),
+                    Text('EDIT',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.outline,
+                            letterSpacing: 0.3)),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),

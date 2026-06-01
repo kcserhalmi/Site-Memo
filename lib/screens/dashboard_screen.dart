@@ -5,6 +5,7 @@ import '../models/job.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
+import 'flagged_screen.dart';
 import 'job_detail_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -75,6 +76,51 @@ class DashboardScreen extends StatelessWidget {
                 builder: (_, p, __) => ListView(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                   children: [
+                    // Flagged banner — only when there are flagged photos
+                    Builder(builder: (ctx) {
+                      final totalFlagged = p.jobs.fold<int>(0, (sum, j) =>
+                          sum + j.inspections.fold<int>(0, (s2, i) =>
+                              s2 + i.photos.where((ph) => ph.isFlagged).length));
+                      if (totalFlagged == 0) return const SizedBox.shrink();
+                      return GestureDetector(
+                        onTap: () => Navigator.push(ctx,
+                            MaterialPageRoute(builder: (_) => const FlaggedScreen())),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.onTertiaryContainer.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppColors.onTertiaryContainer.withOpacity(0.3)),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: AppColors.errorContainer.withOpacity(0.3),
+                                  blurRadius: 12),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.flag,
+                                  color: AppColors.onTertiaryContainer, size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '$totalFlagged item${totalFlagged == 1 ? '' : 's'} flagged for follow-up',
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.onTertiaryContainer),
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right,
+                                  color: AppColors.onTertiaryContainer, size: 18),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                     if (p.activeJobs.isNotEmpty) ...[
                       _SectionLabel('ACTIVE'),
                       ...p.activeJobs
