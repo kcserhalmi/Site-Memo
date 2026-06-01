@@ -133,6 +133,13 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                     itemBuilder: (_, i) {
                       final cat = _filterCats(insp)[i];
                       final active = cat == _filter;
+                      // Calculate count for display
+                      final count = cat == 'ALL'
+                          ? insp.photos.length
+                          : cat == 'FLAGGED'
+                              ? insp.photos.where((p) => p.isFlagged).length
+                              : insp.photos.where((p) => p.category == cat).length;
+                      final label = count > 0 ? '$cat  $count' : cat;
                     return GestureDetector(
                       onTap: () => setState(() => _filter = cat),
                       child: Container(
@@ -149,7 +156,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                                 : AppColors.outlineVariant,
                           ),
                         ),
-                        child: Text(cat,
+                        child: Text(label,
                             style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,

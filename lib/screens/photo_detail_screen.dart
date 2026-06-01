@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../utils/file_utils.dart';
 import 'package:flutter/material.dart';
 import '../models/inspection_photo.dart';
@@ -29,10 +32,19 @@ class PhotoDetailScreen extends StatefulWidget {
 }
 
 class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
+  // Playback
   final _player = AudioPlayer();
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+
+  // Recording (for photos that don't have a voice note yet)
+  final _recorder = AudioRecorder();
+  final _speech = SpeechToText();
+  bool _speechAvail = false;
+  bool _isRecording = false;
+  String _liveTranscription = '';
+  String? _newAudioPath;
 
   @override
   void initState() {
@@ -44,11 +56,54 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     _player.onPlayerComplete.listen((_) {
       if (mounted) setState(() { _isPlaying = false; _position = Duration.zero; });
     });
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    try {
+      _speechAvail = await _speech.initialize(onError: (_) {}, onStatus: (_) {});
+    } catch (_) {}
+  }
+
+  Future<void> _toggleRecord() async {
+    if (_isRecording) {
+      _newAudioPath = await _recorder.stop();
+      try { await _speech.stop(); } catch (_) {}
+      setState(() => _isRecording = false);
+      // Save to photo
+      if (_newAudioPath != null) {
+        final p = widget.photo;
+        await context.read<AppProvider>().updatePhotoVoiceNote(
+            p.jobId, p.inspectionId, p.id,
+            _newAudioPath, _liveTranscription.isNotEmpty ? _liveTranscription : null);
+        setState(() {});
+      }
+    } else {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) return;
+      final path = kIsWeb
+          ? 'voice_${DateTime.now().millisecondsSinceEpoch}.webm'
+          : '${(await getApplicationDocumentsDirectory()).path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      try {
+        await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+      } catch (_) { return; }
+      if (_speechAvail) {
+        try {
+          await _speech.listen(
+            onResult: (r) => setState(() => _liveTranscription = r.recognizedWords),
+            listenOptions: SpeechListenOptions(cancelOnError: false, partialResults: true),
+          );
+        } catch (_) {}
+      }
+      setState(() { _isRecording = true; _liveTranscription = ''; });
+    }
   }
 
   @override
   void dispose() {
     _player.dispose();
+    _recorder.dispose();
+    try { _speech.cancel(); } catch (_) {}
     super.dispose();
   }
 
@@ -293,12 +348,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                     // Hero photo
                     _buildPhotoHero(photo),
                     const SizedBox(height: 20),
-                    // Voice note
-                    if (photo.transcription != null ||
-                        photo.voiceNotePath != null) ...[
-                      _buildVoiceCard(photo),
-                      const SizedBox(height: 16),
-                    ],
+                    // Voice note (always shown)
+                    _buildVoiceCard(photo),
+                    const SizedBox(height: 16),
                     // Metadata grid
                     _buildMetaGrid(photo),
                     const SizedBox(height: 12),
@@ -361,6 +413,87 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   }
 
   Widget _buildVoiceCard(InspectionPhoto photo) {
+    // No note yet — show record button
+    final hasNote = photo.voiceNotePath != null || photo.transcription != null;
+    if (!hasNote && !_isRecording) {
+      return GlassCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('VOICE NOTE',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                    color: AppColors.outline, letterSpacing: 0.5)),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: _toggleRecord,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.outlineVariant.withOpacity(0.5)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.mic_outlined, color: AppColors.outline, size: 18),
+                    SizedBox(width: 8),
+                    Text('TAP TO ADD VOICE NOTE',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                            color: AppColors.outline, letterSpacing: 0.4)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Recording in progress
+    if (_isRecording) {
+      return GlassCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('VOICE NOTE',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                        color: AppColors.outline, letterSpacing: 0.5)),
+                GestureDetector(
+                  onTap: _toggleRecord,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorContainer.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: AppColors.error.withOpacity(0.4)),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.stop, color: AppColors.error, size: 14),
+                      SizedBox(width: 5),
+                      Text('STOP', style: TextStyle(fontSize: 11,
+                          fontWeight: FontWeight.w700, color: AppColors.error)),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            WaveformVisualizer(isActive: true, barCount: 18, height: 28),
+            if (_liveTranscription.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(_liveTranscription,
+                  style: const TextStyle(fontSize: 13, color: AppColors.onSurface,
+                      fontStyle: FontStyle.italic, height: 1.5)),
+            ],
+          ],
+        ),
+      );
+    }
+
     final progress = _duration.inMilliseconds > 0
         ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;

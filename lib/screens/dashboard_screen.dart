@@ -19,7 +19,7 @@ class DashboardScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerHigh,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('New Inspection',
+        title: const Text('New Site',
             style: TextStyle(
                 color: AppColors.onSurface, fontWeight: FontWeight.w700)),
         content: Column(
@@ -109,7 +109,7 @@ class DashboardScreen extends StatelessWidget {
               shadowColor: AppColors.primaryContainer.withOpacity(0.4),
             ),
             icon: const Icon(Icons.add, size: 20),
-            label: const Text('NEW INSPECTION',
+            label: const Text('NEW SITE',
                 style:
                     TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.8, fontSize: 13)),
           ),

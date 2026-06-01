@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
@@ -110,7 +111,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
         return;
       }
 
-      if (_speechAvail) {
+      final autoTranscribe = await AppPrefs.getAutoTranscribe();
+      if (_speechAvail && autoTranscribe) {
         try {
           await _speech.listen(
             onResult: (r) {

@@ -4,6 +4,7 @@ import '../models/job.dart';
 import '../models/inspection.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/app_prefs.dart';
 import '../widgets/glass_card.dart';
 import 'camera_screen.dart';
 import 'inspection_detail_screen.dart';
@@ -19,9 +20,10 @@ class JobDetailScreen extends StatefulWidget {
 class _JobDetailScreenState extends State<JobDetailScreen> {
 
   // ── New Inspection dialog ──────────────────────────────────────────────────
-  void _newInspection(BuildContext context) {
+  void _newInspection(BuildContext context) async {
+    final savedName = await AppPrefs.getInspectorName();
     final titleCtrl = TextEditingController();
-    final inspCtrl = TextEditingController();
+    final inspCtrl = TextEditingController(text: savedName);
     final tagCtrl = TextEditingController();
     DateTime selectedDate = DateTime.now();
     final List<String> tags = [];
