@@ -60,7 +60,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   void initState() {
     super.initState();
     _selectedCat = widget.initialCategory;
-    _initSpeech();
+    // Speech init moved to first mic tap — don't request mic on screen open
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AppProvider>();
       final job = provider.jobs.firstWhere(
@@ -95,6 +95,9 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
       } catch (_) {}
       setState(() => _isRecording = false);
     } else {
+      // Lazy-init speech on first mic tap
+      if (!_speechAvail) await _initSpeech();
+
       final hasPermission = await _recorder.hasPermission();
       if (!hasPermission) {
         _showSnack('Microphone permission denied');

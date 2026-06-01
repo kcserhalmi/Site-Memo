@@ -161,9 +161,11 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: release camera before navigating (iOS requirement) ──
-        if (_ctrl != null && _ctrl!.value.isInitialized) {
-          await _ctrl!.pausePreview();
+        // ── REVIEW: fully release camera before navigating on iOS ───────
+        if (_ctrl != null) {
+          await _ctrl!.dispose();
+          _ctrl = null;
+          if (mounted) setState(() => _cameraReady = false);
         }
         // ── Open tag + voice note screen ────────────────────────────────
         await Navigator.push(
@@ -177,10 +179,8 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
         );
-        // Resume camera after returning from review screen
-        if (mounted && _ctrl != null && _ctrl!.value.isInitialized) {
-          try { await _ctrl!.resumePreview(); } catch (_) {}
-        }
+        // Reinitialize camera after returning from review screen
+        if (mounted && !_isDesktop) _initCamera();
       }
     } finally {
       if (mounted) setState(() => _isCapturing = false);
