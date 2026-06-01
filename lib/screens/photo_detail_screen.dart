@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import '../utils/file_utils.dart';
 import 'package:flutter/material.dart';
 import '../models/inspection_photo.dart';
@@ -330,9 +329,8 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   // Lazy — only created when user taps the mic
   AudioRecorder? _recorder;
-  SpeechToText? _speech;
-  bool _speechAvail = false;
   bool _isRecording = false;
+  int _recordSeconds = 0;
   String _liveTranscription = '';
 
   @override
@@ -352,15 +350,8 @@ class _PhotoPageState extends State<_PhotoPage> {
     });
   }
 
-  Future<void> _ensureRecorder() async {
+  void _ensureRecorder() {
     _recorder ??= AudioRecorder();
-    if (_speech == null) {
-      _speech = SpeechToText();
-      try {
-        _speechAvail = await _speech!.initialize(
-            onError: (_) {}, onStatus: (_) {});
-      } catch (_) {}
-    }
   }
 
   Future<void> _togglePlay() async {
@@ -376,52 +367,49 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   Future<void> _toggleRecord() async {
     if (_isRecording) {
-      final path = await _recorder!.stop();
-      try { await _speech!.stop(); } catch (_) {}
-      setState(() => _isRecording = false);
-      if (path != null && mounted) {
-        final p = widget.photo;
-        await context.read<AppProvider>().updatePhotoVoiceNote(
-            p.jobId, p.inspectionId, p.id, path,
-            _liveTranscription.isNotEmpty ? _liveTranscription : null);
-        setState(() {});
+      try {
+        final path = await _recorder!.stop();
+        setState(() { _isRecording = false; _recordSeconds = 0; });
+        if (path != null && mounted) {
+          final p = widget.photo;
+          await context.read<AppProvider>().updatePhotoVoiceNote(
+              p.jobId, p.inspectionId, p.id, path,
+              _liveTranscription.isNotEmpty ? _liveTranscription : null);
+          setState(() {});
+        }
+      } catch (_) {
+        setState(() { _isRecording = false; });
       }
     } else {
-      await _ensureRecorder();
-      final hasPermission = await _recorder!.hasPermission();
-      if (!hasPermission) return;
-      final recordPath = kIsWeb
-          ? 'voice_${DateTime.now().millisecondsSinceEpoch}.webm'
-          : '${(await getApplicationDocumentsDirectory()).path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      _ensureRecorder();
       try {
+        final hasPermission = await _recorder!.hasPermission();
+        if (!hasPermission) return;
+        final recordPath = kIsWeb
+            ? 'voice_${DateTime.now().millisecondsSinceEpoch}.webm'
+            : '${(await getApplicationDocumentsDirectory()).path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
         await _recorder!.start(
             const RecordConfig(encoder: AudioEncoder.aacLc),
             path: recordPath);
-      } catch (_) {
-        return;
-      }
-      if (_speechAvail) {
-        try {
-          await _speech!.listen(
-            onResult: (r) =>
-                setState(() => _liveTranscription = r.recognizedWords),
-            listenOptions: SpeechListenOptions(
-                cancelOnError: false, partialResults: true),
-          );
-        } catch (_) {}
-      }
-      setState(() {
-        _isRecording = true;
-        _liveTranscription = '';
-      });
+        setState(() { _isRecording = true; _liveTranscription = ''; _recordSeconds = 0; });
+        _tickRecording();
+      } catch (_) {}
     }
+  }
+
+  void _tickRecording() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted && _isRecording) {
+        setState(() => _recordSeconds++);
+        _tickRecording();
+      }
+    });
   }
 
   @override
   void dispose() {
     _player.dispose();
     _recorder?.dispose();
-    try { _speech?.cancel(); } catch (_) {}
     super.dispose();
   }
 
@@ -598,7 +586,7 @@ class _PhotoPageState extends State<_PhotoPage> {
               ],
             ),
             const SizedBox(height: 10),
-            WaveformVisualizer(isActive: true, barCount: 18, height: 26),
+            WaveformVisualizer(isActive: true, barCount: 14, height: 24),
             if (_liveTranscription.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(_liveTranscription,

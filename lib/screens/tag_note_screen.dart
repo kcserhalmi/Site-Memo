@@ -3,7 +3,6 @@ import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import '../models/inspection_photo.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
@@ -47,14 +46,12 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   List<String> _jobCategories = [];
   late String _selectedCat;
   final _captionCtrl = TextEditingController();
-  final _recorder = AudioRecorder();
-  final _speech = SpeechToText();
-  bool _speechAvail = false;
-  bool _isRecording = false;
-  String _transcription = '';
   final _transcriptionCtrl = TextEditingController();
+  final _recorder = AudioRecorder();
+  bool _isRecording = false;
   String? _audioPath;
   bool _isSaving = false;
+  int _recordSeconds = 0;
 
   @override
   void initState() {
@@ -75,76 +72,47 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     });
   }
 
-  Future<void> _initSpeech() async {
-    try {
-      _speechAvail = await _speech.initialize(
-        onError: (_) {},
-        onStatus: (_) {},
-      );
-    } catch (_) {
-      _speechAvail = false;
-    }
-    if (mounted) setState(() {});
-  }
-
   Future<void> _toggleRecord() async {
     if (_isRecording) {
-      _audioPath = await _recorder.stop();
       try {
-        await _speech.stop();
+        _audioPath = await _recorder.stop();
       } catch (_) {}
-      setState(() => _isRecording = false);
+      setState(() { _isRecording = false; _recordSeconds = 0; });
     } else {
-      // Lazy-init speech on first mic tap
-      if (!_speechAvail) await _initSpeech();
-
-      final hasPermission = await _recorder.hasPermission();
-      if (!hasPermission) {
-        _showSnack('Microphone permission denied');
-        return;
-      }
-      final path = await getAudioRecordPath();
-
       try {
+        final hasPermission = await _recorder.hasPermission();
+        if (!hasPermission) {
+          _showSnack('Allow microphone access in Settings to record audio.');
+          return;
+        }
+        final path = await getAudioRecordPath();
         await _recorder.start(
           const RecordConfig(encoder: AudioEncoder.aacLc),
           path: path,
         );
+        setState(() { _isRecording = true; _recordSeconds = 0; });
+        // Tick counter while recording
+        _tickRecording();
       } catch (e) {
-        _showSnack('Could not start recording: $e');
-        return;
+        _showSnack('Could not start recording.');
       }
-
-      final autoTranscribe = await AppPrefs.getAutoTranscribe();
-      if (_speechAvail && autoTranscribe) {
-        try {
-          await _speech.listen(
-            onResult: (r) {
-              if (mounted) {
-                setState(() {
-                  _transcription = r.recognizedWords;
-                  _transcriptionCtrl.text = _transcription;
-                });
-              }
-            },
-            listenOptions: SpeechListenOptions(
-              cancelOnError: false,
-              partialResults: true,
-            ),
-          );
-        } catch (_) {}
-      }
-      setState(() => _isRecording = true);
     }
+  }
+
+  void _tickRecording() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted && _isRecording) {
+        setState(() => _recordSeconds++);
+        _tickRecording();
+      }
+    });
   }
 
   Future<void> _save() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
 
-    final finalTranscription = _transcriptionCtrl.text.trim().isNotEmpty
-        ? _transcriptionCtrl.text.trim()
-        : _transcription.trim();
+    final finalTranscription = _transcriptionCtrl.text.trim();
 
     final photo = InspectionPhoto(
       id: context.read<AppProvider>().generateId(),
@@ -238,9 +206,6 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     _recorder.dispose();
     _captionCtrl.dispose();
     _transcriptionCtrl.dispose();
-    try {
-      _speech.cancel();
-    } catch (_) {}
     super.dispose();
   }
 
@@ -336,7 +301,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
         child: SizedBox(
           width: 192,
           height: 192,
-          child: appImage(widget.imagePath),
+          child: appImage(widget.imagePath, cacheWidth: 400),
         ),
       ),
     );
@@ -460,6 +425,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   }
 
   Widget _buildVoiceNoteSection() {
+    final mins = (_recordSeconds ~/ 60).toString().padLeft(1, '0');
+    final secs = (_recordSeconds % 60).toString().padLeft(2, '0');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -472,15 +439,13 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                     fontWeight: FontWeight.w700,
                     color: AppColors.outline,
                     letterSpacing: 0.5)),
-            if (_transcription.isNotEmpty || _transcriptionCtrl.text.isNotEmpty)
+            if (_audioPath != null || _transcriptionCtrl.text.isNotEmpty)
               GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _transcription = '';
-                    _transcriptionCtrl.clear();
-                    _audioPath = null;
-                  });
-                },
+                onTap: () => setState(() {
+                  _transcriptionCtrl.clear();
+                  _audioPath = null;
+                  _recordSeconds = 0;
+                }),
                 child: const Text('CLEAR',
                     style: TextStyle(
                         fontSize: 11,
@@ -541,54 +506,43 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                   ),
                   const SizedBox(width: 8),
                   if (_isRecording)
-                    const Text('REC',
-                        style: TextStyle(
-                            fontSize: 10,
+                    Text('$mins:$secs',
+                        style: const TextStyle(
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: AppColors.error,
-                            letterSpacing: 0.4))
+                            fontFeatures: [FontFeature.tabularFigures()]))
                   else if (_audioPath != null)
                     const Icon(Icons.check_circle,
                         color: AppColors.secondary, size: 18),
                 ],
               ),
-              // Transcription
-              if (_isRecording || _transcription.isNotEmpty ||
-                  _transcriptionCtrl.text.isNotEmpty) ...[
+              // Notes text field — always visible when recording or has audio
+              if (_isRecording || _audioPath != null) ...[
                 const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                TextField(
+                  controller: _transcriptionCtrl,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.onSurface),
+                  cursorColor: AppColors.primary,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: _isRecording
+                        ? 'Recording… add notes here'
+                        : 'Add notes about this recording…',
+                    hintStyle: const TextStyle(
+                        color: AppColors.outline,
+                        fontStyle: FontStyle.italic,
+                        fontSize: 13),
+                    filled: true,
+                    fillColor: const Color(0xFF181818),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
                   ),
-                  child: _isRecording && !_speechAvail
-                      ? const Text(
-                          'Recording… transcription will appear when done.',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.outline,
-                              fontStyle: FontStyle.italic),
-                        )
-                      : TextField(
-                          controller: _transcriptionCtrl,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.onSurface,
-                              fontStyle: FontStyle.italic),
-                          maxLines: null,
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            hintText: 'Transcription will appear here…',
-                            hintStyle: TextStyle(
-                                color: AppColors.outline,
-                                fontStyle: FontStyle.italic),
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ),
                 ),
               ] else ...[
                 const SizedBox(height: 12),
