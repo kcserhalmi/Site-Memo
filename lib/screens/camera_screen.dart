@@ -161,8 +161,12 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: open tag + voice note screen ───────────────────────
-        Navigator.push(
+        // ── REVIEW: release camera before navigating (iOS requirement) ──
+        if (_ctrl != null && _ctrl!.value.isInitialized) {
+          await _ctrl!.pausePreview();
+        }
+        // ── Open tag + voice note screen ────────────────────────────────
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => TagNoteScreen(
@@ -173,6 +177,10 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
         );
+        // Resume camera after returning from review screen
+        if (mounted && _ctrl != null && _ctrl!.value.isInitialized) {
+          try { await _ctrl!.resumePreview(); } catch (_) {}
+        }
       }
     } finally {
       if (mounted) setState(() => _isCapturing = false);
