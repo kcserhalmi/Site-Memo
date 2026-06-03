@@ -14,8 +14,28 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  // Tracks which tabs have been opened at least once.
+  // Unvisited tabs render as SizedBox.shrink() so they don't
+  // allocate resources (camera, microphone, etc.) until needed.
+  final List<bool> _initialized = [true, false, false, false];
 
-  void _switchTab(int i) => setState(() => _index = i);
+  void _switchTab(int i) {
+    setState(() {
+      _initialized[i] = true;
+      _index = i;
+    });
+  }
+
+  Widget _screen(int i) {
+    if (!_initialized[i]) return const SizedBox.shrink();
+    switch (i) {
+      case 0: return DashboardScreen(onOpenAccount: () => _switchTab(3));
+      case 1: return const CameraScreen();
+      case 2: return const SearchScreen();
+      case 3: return const AccountScreen();
+      default: return const SizedBox.shrink();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,12 +43,7 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: AppColors.background,
       body: IndexedStack(
         index: _index,
-        children: [
-          DashboardScreen(onOpenAccount: () => _switchTab(3)),
-          const CameraScreen(),
-          const SearchScreen(),
-          const AccountScreen(),
-        ],
+        children: List.generate(4, _screen),
       ),
       bottomNavigationBar: _BottomNav(
         currentIndex: _index,

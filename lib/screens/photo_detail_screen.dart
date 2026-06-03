@@ -441,6 +441,7 @@ class _PhotoPageState extends State<_PhotoPage> {
           fit: StackFit.expand,
           children: [
             appImage(photo.imagePath,
+                cacheWidth: 800,
                 fallback: Container(
                   color: AppColors.surfaceContainerHigh,
                   child: const Icon(Icons.image,

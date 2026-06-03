@@ -298,7 +298,8 @@ class _PhotoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return RepaintBoundary(
+      child: GestureDetector(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
@@ -377,7 +378,8 @@ class _PhotoTile extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ), // GestureDetector
+    ); // RepaintBoundary
   }
 }
 

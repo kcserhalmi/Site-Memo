@@ -372,4 +372,12 @@ class AppProvider extends ChangeNotifier {
   }
 
   String generateId() => _uuid.v4();
+
+  // ── Computed getters (cached by provider, not recalculated per-widget) ──────
+
+  int get totalFlaggedCount => _jobs.fold(0, (sum, j) =>
+      sum + j.inspections.fold(0, (s2, i) =>
+          s2 + i.photos.where((p) => p.isFlagged).length));
+
+  int get totalPhotoCount => _jobs.fold(0, (sum, j) => sum + j.photoCount);
 }

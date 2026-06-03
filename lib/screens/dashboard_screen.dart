@@ -111,9 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }),
                     // Flagged banner — only when there are flagged photos
                     Builder(builder: (ctx) {
-                      final totalFlagged = p.jobs.fold<int>(0, (sum, j) =>
-                          sum + j.inspections.fold<int>(0, (s2, i) =>
-                              s2 + i.photos.where((ph) => ph.isFlagged).length));
+                      final totalFlagged = p.totalFlaggedCount;
                       if (totalFlagged == 0) return const SizedBox.shrink();
                       return GestureDetector(
                         onTap: () => Navigator.push(ctx,
