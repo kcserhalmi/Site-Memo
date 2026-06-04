@@ -760,6 +760,7 @@ class FullPhotoScreen extends StatefulWidget {
 class _FullPhotoScreenState extends State<FullPhotoScreen> {
   late PageController _ctrl;
   late int _current;
+  bool _showUI = true; // tap to toggle UI visibility
 
   @override
   void initState() {
@@ -772,6 +773,24 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _share(InspectionPhoto photo) async {
+    try {
+      final text = photo.transcription != null && photo.transcription!.isNotEmpty
+          ? '${photo.category} — ${photo.transcription}'
+          : photo.category;
+      await Share.shareXFiles([XFile(photo.imagePath)],
+          text: text, subject: 'Site Memo');
+    } catch (_) {}
+  }
+
+  Future<void> _download(InspectionPhoto photo) async {
+    // On iOS, sharing with save option is the standard way to download
+    try {
+      await Share.shareXFiles([XFile(photo.imagePath)],
+          subject: 'Save photo');
+    } catch (_) {}
   }
 
   @override
@@ -787,79 +806,118 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
             controller: _ctrl,
             onPageChanged: (i) => setState(() => _current = i),
             itemCount: widget.photos.length,
-            itemBuilder: (_, i) => InteractiveViewer(
-              minScale: 1.0,
-              maxScale: 5.0,
-              child: Center(
-                child: appImage(widget.photos[i].imagePath, fit: BoxFit.contain),
-              ),
-            ),
-          ),
-
-          // ── Top floating row ─────────────────────────────────────────────
-          Positioned(
-            top: 0, left: 0, right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  children: [
-                    // Back — small circle
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 34, height: 34,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.2)),
-                        ),
-                        child: const Icon(Icons.arrow_back,
-                            color: Colors.white, size: 17),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Location tag pill
-                    _Bubble(
-                      child: Text(photo.category,
-                          style: const TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3)),
-                      borderColor: AppColors.primary.withOpacity(0.45),
-                    ),
-                    if (photo.isFlagged) ...[
-                      const SizedBox(width: 6),
-                      _Bubble(
-                        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.flag, color: AppColors.onTertiaryContainer, size: 11),
-                          SizedBox(width: 3),
-                          Text('FLAGGED', style: TextStyle(
-                              color: AppColors.onTertiaryContainer,
-                              fontSize: 10, fontWeight: FontWeight.w700)),
-                        ]),
-                        borderColor: AppColors.onTertiaryContainer.withOpacity(0.4),
-                      ),
-                    ],
-                    const Spacer(),
-                    // Photo counter
-                    if (widget.photos.length > 1)
-                      _Bubble(
-                        child: Text('${_current + 1} / ${widget.photos.length}',
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 11)),
-                        borderColor: Colors.white.withOpacity(0.15),
-                      ),
-                  ],
+            itemBuilder: (_, i) => GestureDetector(
+              onTap: () => setState(() => _showUI = !_showUI),
+              child: InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 5.0,
+                child: SizedBox.expand(
+                  child: appImage(widget.photos[i].imagePath, fit: BoxFit.cover),
                 ),
               ),
             ),
           ),
 
-          // ── Bottom notes overlay ──────────────────────────────────────────
+          // ── Top floating row (tap photo to hide/show) ───────────────────
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: AnimatedOpacity(
+              opacity: _showUI ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: !_showUI,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        // Back
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            width: 34, height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.2)),
+                            ),
+                            child: const Icon(Icons.arrow_back,
+                                color: Colors.white, size: 17),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Location tag
+                        _Bubble(
+                          child: Text(photo.category,
+                              style: const TextStyle(color: AppColors.primary,
+                                  fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                          borderColor: AppColors.primary.withOpacity(0.45),
+                        ),
+                        if (photo.isFlagged) ...[
+                          const SizedBox(width: 6),
+                          _Bubble(
+                            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.flag, color: AppColors.onTertiaryContainer, size: 11),
+                              SizedBox(width: 3),
+                              Text('FLAGGED', style: TextStyle(
+                                  color: AppColors.onTertiaryContainer,
+                                  fontSize: 10, fontWeight: FontWeight.w700)),
+                            ]),
+                            borderColor: AppColors.onTertiaryContainer.withOpacity(0.4),
+                          ),
+                        ],
+                        const Spacer(),
+                        // Download
+                        GestureDetector(
+                          onTap: () => _download(photo),
+                          child: Container(
+                            width: 34, height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.2)),
+                            ),
+                            child: const Icon(Icons.download_outlined,
+                                color: Colors.white, size: 17),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Share
+                        GestureDetector(
+                          onTap: () => _share(photo),
+                          child: Container(
+                            width: 34, height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.2)),
+                            ),
+                            child: const Icon(Icons.ios_share,
+                                color: Colors.white, size: 17),
+                          ),
+                        ),
+                        if (widget.photos.length > 1) ...[
+                          const SizedBox(width: 8),
+                          _Bubble(
+                            child: Text('${_current + 1} / ${widget.photos.length}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                            borderColor: Colors.white.withOpacity(0.15),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Bottom notes overlay (hidden when UI is off) ─────────────────
           if (photo.transcription != null && photo.transcription!.isNotEmpty)
-            Positioned(
+            AnimatedOpacity(
+              opacity: _showUI ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: Positioned(
               bottom: 0, left: 0, right: 0,
               child: Container(
                 decoration: BoxDecoration(
@@ -886,7 +944,8 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
                   ),
                 ),
               ),
-            ),
+            ), // Positioned
+            ), // AnimatedOpacity
         ],
       ),
     );

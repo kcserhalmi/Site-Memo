@@ -75,7 +75,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startController(int index) async {
     await _ctrl?.dispose();
-    _ctrl = CameraController(_cameras[index], ResolutionPreset.high,
+    _ctrl = CameraController(_cameras[index], ResolutionPreset.veryHigh,
         enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
     await _ctrl!.initialize();
     _minZoom = await _ctrl!.getMinZoomLevel();

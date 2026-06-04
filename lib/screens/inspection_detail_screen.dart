@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/inspection.dart';
 import '../models/inspection_photo.dart';
 import '../models/job.dart';
@@ -24,6 +25,61 @@ class InspectionDetailScreen extends StatefulWidget {
 
 class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
   String _filter = 'ALL';
+  final Set<String> _selectedIds = {};
+  bool get _isSelecting => _selectedIds.isNotEmpty;
+
+  void _toggleSelect(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _clearSelection() => setState(() => _selectedIds.clear());
+
+  Future<void> _shareSelected(List<InspectionPhoto> allPhotos) async {
+    final selected = allPhotos.where((p) => _selectedIds.contains(p.id)).toList();
+    if (selected.isEmpty) return;
+    try {
+      await Share.shareXFiles(
+        selected.map((p) => XFile(p.imagePath)).toList(),
+        subject: 'Site Memo Photos',
+      );
+    } catch (_) {}
+    _clearSelection();
+  }
+
+  Future<void> _deleteSelected(BuildContext context, String jobId,
+      String inspId, List<InspectionPhoto> allPhotos) async {
+    final toDelete = allPhotos.where((p) => _selectedIds.contains(p.id)).toList();
+    final count = toDelete.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete $count photo${count == 1 ? '' : 's'}?',
+            style: const TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w700)),
+        content: const Text('This cannot be undone.',
+            style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dCtx, false),
+              child: const Text('CANCEL', style: TextStyle(color: AppColors.outline, fontSize: 12))),
+          TextButton(onPressed: () => Navigator.pop(dCtx, true),
+              child: const Text('DELETE', style: TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final provider = context.read<AppProvider>();
+    for (final p in toDelete) {
+      await provider.deletePhoto(jobId, inspId, p.id);
+    }
+    _clearSelection();
+  }
 
   List<String> _filterCats(Inspection insp) =>
       ['ALL', 'FLAGGED', ...insp.categories];
@@ -118,7 +174,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               ),
             ],
           ),
-          body: Column(
+          body: Stack(children: [Column(
             children: [
               // Inspector + stats row
               if (insp.inspector.isNotEmpty)
@@ -239,23 +295,101 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                         itemCount: photos.length,
                         itemBuilder: (_, i) => _PhotoTile(
                             photo: photos[i], index: i,
-                            allPhotos: photos),
+                            allPhotos: photos,
+                            isSelecting: _isSelecting,
+                            isSelected: _selectedIds.contains(photos[i].id),
+                            onLongPress: () => _toggleSelect(photos[i].id),
+                            onSelectTap: () => _toggleSelect(photos[i].id)),
                       ),
                 ), // RepaintBoundary
               ),
             ],
-          ),
+          ), // Column
+          // ── Multi-select action bar (Positioned at bottom of Stack) ──────
+          if (_isSelecting)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                color: AppColors.surfaceContainer,
+                padding: EdgeInsets.fromLTRB(16, 12, 16,
+                    12 + MediaQuery.of(context).padding.bottom),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _clearSelection,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.close, color: AppColors.outline, size: 14),
+                          const SizedBox(width: 6),
+                          Text('${_selectedIds.length} selected',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurface)),
+                        ]),
+                      ),
+                    ),
+                    const Spacer(),
+                    _ActionBtn(icon: Icons.ios_share, label: 'Share',
+                        onTap: () => _shareSelected(photos)),
+                    const SizedBox(width: 8),
+                    _ActionBtn(icon: Icons.delete_outline, label: 'Delete',
+                        color: AppColors.error,
+                        onTap: () => _deleteSelected(context, job.id, insp.id, photos)),
+                  ],
+                ),
+              ),
+            ),
+          ]), // Stack
         );
       },
     );
   }
 }
 
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  const _ActionBtn({required this.icon, required this.label, required this.onTap, this.color});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: (color ?? AppColors.outline).withOpacity(0.3)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: color ?? AppColors.onSurface, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                color: color ?? AppColors.onSurface)),
+          ]),
+        ),
+      );
+}
+
 class _PhotoTile extends StatelessWidget {
   final InspectionPhoto photo;
-  final int index; // 0-based index into allPhotos
+  final int index;
   final List<InspectionPhoto> allPhotos;
-  const _PhotoTile({required this.photo, required this.index, required this.allPhotos});
+  final bool isSelecting;
+  final bool isSelected;
+  final VoidCallback onLongPress;
+  final VoidCallback onSelectTap;
+  const _PhotoTile({
+    required this.photo, required this.index, required this.allPhotos,
+    this.isSelecting = false, this.isSelected = false,
+    required this.onLongPress, required this.onSelectTap,
+  });
 
   Color _catColor(String cat) {
     if (cat == 'DAMAGE') return AppColors.onTertiaryContainer;
@@ -343,13 +477,15 @@ class _PhotoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) =>
-                PhotoDetailScreen(photos: allPhotos, initialIndex: index)),
-      ),
-      onLongPress: () => _showOptions(context),
+      onTap: () {
+        if (isSelecting) {
+          onSelectTap();
+        } else {
+          Navigator.push(context, MaterialPageRoute(
+              builder: (_) => PhotoDetailScreen(photos: allPhotos, initialIndex: index)));
+        }
+      },
+      onLongPress: isSelecting ? null : () { onLongPress(); },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: Stack(
@@ -418,9 +554,31 @@ class _PhotoTile extends StatelessWidget {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
+            // Selection overlay — inside Stack children
+            if (isSelecting)
+              Positioned.fill(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primaryContainer.withOpacity(0.35)
+                        : Colors.black.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(10),
+                    border: isSelected
+                        ? Border.all(color: AppColors.primaryContainer, width: 2.5)
+                        : null,
+                  ),
+                  child: isSelected
+                      ? const Center(
+                          child: Icon(Icons.check_circle,
+                              color: AppColors.primaryContainer, size: 32),
+                        )
+                      : null,
+                ),
+              ),
+          ], // Stack children
+        ), // Stack
+      ), // ClipRRect
     ), // GestureDetector
     ); // RepaintBoundary
   }
