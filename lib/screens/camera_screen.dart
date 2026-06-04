@@ -128,31 +128,26 @@ class _CameraScreenState extends State<CameraScreen>
 
     setState(() => _isCapturing = true);
     try {
-      XFile? file;
-      if (_cameraReady && _ctrl != null) {
-        file = await _ctrl!.takePicture();
-      } else {
-        final src = _isDesktop ? ImageSource.gallery : ImageSource.camera;
-        final hq = await AppPrefs.getHighQuality();
-        file = await ImagePicker().pickImage(
-          source: src,
-          imageQuality: hq ? 100 : 82,
-          maxWidth: hq ? 4096 : 2048,
-        );
-      }
-      if (file == null || !mounted) return;
-
-      setState(() => _lastThumb = file!.path);
+      final hq = await AppPrefs.getHighQuality();
       final location = _activeLocation(insp);
 
       if (_burstMode) {
-        // ── BURST: save instantly, stay in camera ──────────────────────
+        // ── BURST: use controller for instant capture ──────────────────
+        XFile? file;
+        if (_cameraReady && _ctrl != null) {
+          file = await _ctrl!.takePicture();
+        } else {
+          final src = _isDesktop ? ImageSource.gallery : ImageSource.camera;
+          file = await ImagePicker().pickImage(
+              source: src, imageQuality: hq ? 100 : 82,
+              maxWidth: hq ? 4096 : 2048);
+        }
+        if (file == null || !mounted) return;
+        setState(() => _lastThumb = file!.path);
         final photo = InspectionPhoto(
           id: provider.generateId(),
-          jobId: site.id,
-          inspectionId: insp.id,
-          imagePath: file.path,
-          category: location,
+          jobId: site.id, inspectionId: insp.id,
+          imagePath: file.path, category: location,
           timestamp: DateTime.now(),
         );
         await provider.addPhoto(site.id, insp.id, photo);
@@ -161,29 +156,36 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: fully release camera before navigating on iOS ───────
+        // ── REVIEW: dispose controller FIRST, then use image_picker ────
+        // This fully releases the iOS AVCaptureSession before opening
+        // the native camera, eliminating the resource conflict crash.
         if (_ctrl != null) {
-          // Null out and hide preview BEFORE disposing to avoid
-          // CameraPreview building against a disposed controller
           final ctrlToDispose = _ctrl;
           _ctrl = null;
           if (mounted) setState(() => _cameraReady = false);
-          await Future.microtask(() {}); // let the frame render without camera
+          await WidgetsBinding.instance.endOfFrame;
           try { await ctrlToDispose!.dispose(); } catch (_) {}
         }
-        // ── Open tag + voice note screen ────────────────────────────────
+        // Use native iOS camera via image_picker — clean session handoff
+        final src = _isDesktop ? ImageSource.gallery : ImageSource.camera;
+        final file = await ImagePicker().pickImage(
+            source: src, imageQuality: hq ? 100 : 82,
+            maxWidth: hq ? 4096 : 2048);
+        if (file == null || !mounted) {
+          if (mounted && !_isDesktop) _initCamera();
+          return;
+        }
+        setState(() => _lastThumb = file.path);
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => TagNoteScreen(
-              imagePath: file!.path,
-              jobId: site.id,
-              inspectionId: insp.id,
+              imagePath: file.path,
+              jobId: site.id, inspectionId: insp.id,
               initialCategory: location,
             ),
           ),
         );
-        // Reinitialize camera after returning from review screen
         if (mounted && !_isDesktop) _initCamera();
       }
     } finally {
