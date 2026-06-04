@@ -9,6 +9,7 @@ import '../utils/file_utils.dart';
 import '../widgets/glass_card.dart';
 import 'camera_screen.dart';
 import 'photo_detail_screen.dart';
+import '../services/export_service.dart';
 
 class InspectionDetailScreen extends StatefulWidget {
   final Job job;
@@ -66,6 +67,40 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               ],
             ),
             actions: [
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.ios_share, color: AppColors.outline),
+                color: AppColors.surfaceContainerHigh,
+                tooltip: 'Export',
+                onSelected: (v) async {
+                  if (v == 'pdf') {
+                    await ExportService.exportPdf(job, insp);
+                  } else if (v == 'zip') {
+                    await ExportService.exportZip(job, insp);
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'pdf',
+                    child: Row(children: [
+                      Icon(Icons.picture_as_pdf_outlined,
+                          color: AppColors.onTertiaryContainer, size: 16),
+                      SizedBox(width: 10),
+                      Text('Export PDF',
+                          style: TextStyle(color: AppColors.onSurface)),
+                    ]),
+                  ),
+                  const PopupMenuItem(
+                    value: 'zip',
+                    child: Row(children: [
+                      Icon(Icons.folder_zip_outlined,
+                          color: AppColors.primary, size: 16),
+                      SizedBox(width: 10),
+                      Text('Export ZIP (photos + notes)',
+                          style: TextStyle(color: AppColors.onSurface)),
+                    ]),
+                  ),
+                ],
+              ),
               IconButton(
                 icon: const Icon(Icons.add_a_photo_outlined,
                     color: AppColors.primary),

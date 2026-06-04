@@ -7,6 +7,7 @@ class Inspection {
   String inspector;
   DateTime date;
   String notes; // general observation for this visit
+  String status; // 'in_progress' | 'submitted' | 'approved'
   final DateTime createdAt;
   List<InspectionPhoto> photos;
   List<String> categories;
@@ -19,6 +20,7 @@ class Inspection {
     required this.date,
     required this.createdAt,
     this.notes = '',
+    this.status = 'in_progress',
     List<InspectionPhoto>? photos,
     List<String>? categories,
   })  : photos = photos ?? [],
@@ -43,6 +45,7 @@ class Inspection {
         'date': date.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
         'notes': notes,
+        'status': status,
         'photos': photos.map((p) => p.toJson()).toList(),
         'categories': categories,
       };
@@ -55,6 +58,7 @@ class Inspection {
         date: DateTime.parse(json['date'] as String),
         createdAt: DateTime.parse(json['createdAt'] as String),
         notes: json['notes'] as String? ?? '',
+        status: json['status'] as String? ?? 'in_progress',
         photos: (json['photos'] as List<dynamic>?)
                 ?.map((p) =>
                     InspectionPhoto.fromJson(p as Map<String, dynamic>))

@@ -380,6 +380,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
+  void _cycleStatus(BuildContext context, Inspection insp) {
+    const order = ['in_progress', 'submitted', 'approved'];
+    final next = order[(order.indexOf(insp.status) + 1) % order.length];
+    context.read<AppProvider>().updateInspectionStatus(widget.job.id, insp.id, next);
+  }
+
   String _formatDate(DateTime d) {
     const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return '${m[d.month - 1]} ${d.day}, ${d.year}';
@@ -458,6 +464,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               MaterialPageRoute(builder: (_) => InspectionDetailScreen(
                                   job: job, inspection: sorted[i]))),
                           onEdit: () => _editInspection(context, sorted[i]),
+                          onStatusTap: () => _cycleStatus(context, sorted[i]),
                         ),
                       ),
               ),
@@ -553,7 +560,8 @@ class _InspectionCard extends StatelessWidget {
   final Job job;
   final VoidCallback onTap;
   final VoidCallback onEdit;
-  const _InspectionCard({required this.inspection, required this.job, required this.onTap, required this.onEdit});
+  final VoidCallback onStatusTap;
+  const _InspectionCard({required this.inspection, required this.job, required this.onTap, required this.onEdit, required this.onStatusTap});
 
   @override
   Widget build(BuildContext context) {
@@ -617,6 +625,11 @@ class _InspectionCard extends StatelessWidget {
                         _Pill('${inspection.flaggedCount} flagged',
                             AppColors.onTertiaryContainer),
                       ],
+                      const SizedBox(width: 6),
+                      _StatusPill(
+                        status: inspection.status,
+                        onTap: onStatusTap,
+                      ),
                     ],
                   ),
                 ],
@@ -721,6 +734,43 @@ class _Field extends StatelessWidget {
           focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primaryContainer, width: 2)),
         ),
       );
+}
+
+class _StatusPill extends StatelessWidget {
+  final String status;
+  final VoidCallback onTap;
+  const _StatusPill({required this.status, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = status == 'approved'
+        ? 'APPROVED'
+        : status == 'submitted'
+            ? 'SUBMITTED'
+            : 'IN PROGRESS';
+    final color = status == 'approved'
+        ? AppColors.secondary
+        : status == 'submitted'
+            ? const Color(0xFF64B5F6)
+            : AppColors.primaryFixedDim;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: color,
+                letterSpacing: 0.3)),
+      ),
+    );
+  }
 }
 
 class _EmptyInspections extends StatelessWidget {

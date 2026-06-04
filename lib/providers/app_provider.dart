@@ -238,6 +238,18 @@ class AppProvider extends ChangeNotifier {
     return insp;
   }
 
+  Future<void> updateInspectionStatus(
+      String jobId, String inspectionId, String status) async {
+    final ji = _jobs.indexWhere((j) => j.id == jobId);
+    if (ji == -1) return;
+    final ii =
+        _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
+    if (ii == -1) return;
+    _jobs[ji].inspections[ii].status = status;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> editInspection(
       String jobId, String inspectionId, String title, String inspector,
       DateTime date) async {
