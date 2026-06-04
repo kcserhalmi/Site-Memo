@@ -279,6 +279,12 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                   photo: widget.photos[i],
                   photoIndex: i + 1,
                   onEditTranscription: _editTranscription,
+                  onFullScreen: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => FullPhotoScreen(
+                      photos: widget.photos,
+                      initialIndex: i,
+                    ),
+                  )),
                 ),
               ),
             ),
@@ -297,12 +303,14 @@ class _PhotoPage extends StatefulWidget {
   final InspectionPhoto photo;
   final int photoIndex;
   final VoidCallback onEditTranscription;
+  final VoidCallback onFullScreen;
 
   const _PhotoPage({
     super.key,
     required this.photo,
     required this.photoIndex,
     required this.onEditTranscription,
+    required this.onFullScreen,
   });
 
   @override
@@ -386,9 +394,7 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   Widget _buildHero(InspectionPhoto photo) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => FullPhotoScreen(photo: photo),
-      )),
+      onTap: widget.onFullScreen,
       child: ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: AspectRatio(
@@ -740,85 +746,166 @@ class _MetaBox extends StatelessWidget {
       );
 }
 
-// ── Full-screen photo viewer ──────────────────────────────────────────────────
+// ── Full-screen photo viewer (swipeable, modern UI) ──────────────────────────
 
-class FullPhotoScreen extends StatelessWidget {
-  final InspectionPhoto photo;
-  const FullPhotoScreen({super.key, required this.photo});
+class FullPhotoScreen extends StatefulWidget {
+  final List<InspectionPhoto> photos;
+  final int initialIndex;
+  const FullPhotoScreen({super.key, required this.photos, required this.initialIndex});
+
+  @override
+  State<FullPhotoScreen> createState() => _FullPhotoScreenState();
+}
+
+class _FullPhotoScreenState extends State<FullPhotoScreen> {
+  late PageController _ctrl;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialIndex;
+    _ctrl = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final photo = widget.photos[_current];
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          InteractiveViewer(
-            minScale: 1.0,
-            maxScale: 5.0,
-            child: Center(child: appImage(photo.imagePath, fit: BoxFit.contain)),
+          // Swipeable photo pages with pinch-to-zoom
+          PageView.builder(
+            controller: _ctrl,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemCount: widget.photos.length,
+            itemBuilder: (_, i) => InteractiveViewer(
+              minScale: 1.0,
+              maxScale: 5.0,
+              child: Center(
+                child: appImage(widget.photos[i].imagePath, fit: BoxFit.contain),
+              ),
+            ),
           ),
-          // Back button
+
+          // ── Top floating row ─────────────────────────────────────────────
           Positioned(
             top: 0, left: 0, right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: const Icon(Icons.arrow_back,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Bottom overlay
-          Positioned(
-            bottom: 0, left: 0, right: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.85), Colors.transparent],
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 40, 20, 0),
-              child: SafeArea(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryContainer.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppColors.primary.withOpacity(0.4)),
+                    // Back — small circle
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        width: 34, height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.2)),
+                        ),
+                        child: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 17),
                       ),
-                      child: Text(photo.category,
-                          style: const TextStyle(color: AppColors.primary,
-                              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
                     ),
-                    if (photo.transcription != null && photo.transcription!.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(photo.transcription!,
-                          style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5)),
+                    const SizedBox(width: 10),
+                    // Location tag pill
+                    _Bubble(
+                      child: Text(photo.category,
+                          style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3)),
+                      borderColor: AppColors.primary.withOpacity(0.45),
+                    ),
+                    if (photo.isFlagged) ...[
+                      const SizedBox(width: 6),
+                      _Bubble(
+                        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.flag, color: AppColors.onTertiaryContainer, size: 11),
+                          SizedBox(width: 3),
+                          Text('FLAGGED', style: TextStyle(
+                              color: AppColors.onTertiaryContainer,
+                              fontSize: 10, fontWeight: FontWeight.w700)),
+                        ]),
+                        borderColor: AppColors.onTertiaryContainer.withOpacity(0.4),
+                      ),
                     ],
-                    const SizedBox(height: 16),
+                    const Spacer(),
+                    // Photo counter
+                    if (widget.photos.length > 1)
+                      _Bubble(
+                        child: Text('${_current + 1} / ${widget.photos.length}',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11)),
+                        borderColor: Colors.white.withOpacity(0.15),
+                      ),
                   ],
                 ),
               ),
             ),
           ),
+
+          // ── Bottom notes overlay ──────────────────────────────────────────
+          if (photo.transcription != null && photo.transcription!.isNotEmpty)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.82), Colors.transparent],
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 48, 20, 0),
+                child: SafeArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(photo.transcription!,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.6,
+                              shadows: [Shadow(color: Colors.black54, blurRadius: 8)])),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+}
+
+class _Bubble extends StatelessWidget {
+  final Widget child;
+  final Color borderColor;
+  const _Bubble({required this.child, required this.borderColor});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.45),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: borderColor),
+        ),
+        child: child,
+      );
 }

@@ -211,7 +211,11 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return GestureDetector(
+      // Tap anywhere outside text fields to dismiss keyboard
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
@@ -219,6 +223,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
             _buildHeader(),
             Expanded(
               child: SingleChildScrollView(
+                // Drag down to dismiss keyboard
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +243,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
           ],
         ),
       ),
-    );
+    ), // Scaffold
+    ); // GestureDetector
   }
 
   Widget _buildHeader() {
