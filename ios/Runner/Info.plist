@@ -6,6 +6,8 @@
 	<string>Site Memo needs camera access to capture inspection photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Site Memo needs microphone access to record voice notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Site Memo uses speech recognition to transcribe your spoken inspection notes to text.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Site Memo needs photo library access to attach photos.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
