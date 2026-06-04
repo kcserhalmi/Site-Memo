@@ -1,10 +1,7 @@
-import 'dart:async';
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/file_utils.dart';
 import 'package:flutter/material.dart';
@@ -313,82 +310,58 @@ class _PhotoPage extends StatefulWidget {
 }
 
 class _PhotoPageState extends State<_PhotoPage> {
-  // Lazy — playback no longer shown in UI but kept for compatibility
-  AudioPlayer? _player;
-  bool _isPlaying = false;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-
-  // Lazy — only created when user taps the mic
-  AudioRecorder? _recorder;
-  Timer? _recordTimer;
-  bool _isRecording = false;
-  int _recordSeconds = 0;
-  String _liveTranscription = '';
+  // Speech-to-text for notes (no audio recording)
+  final _speech = SpeechToText();
+  bool _speechAvail = false;
+  bool _isListening = false;
+  final _notesCtrl = TextEditingController();
+  bool _editingNotes = false; // true when inline notes editor is open
 
   @override
   void initState() {
     super.initState();
-    // AudioPlayer is lazy — not created until playback is requested
-  }
-
-  void _ensureRecorder() {
-    _recorder ??= AudioRecorder();
-  }
-
-  Future<void> _togglePlay() async {
-    if (widget.photo.voiceNotePath == null) return;
-    _player ??= AudioPlayer();
-    if (_isPlaying) {
-      await _player!.pause();
-      setState(() => _isPlaying = false);
-    } else {
-      await _player!.play(DeviceFileSource(widget.photo.voiceNotePath!));
-      setState(() => _isPlaying = true);
-    }
-  }
-
-  Future<void> _toggleRecord() async {
-    if (_isRecording) {
+    Future.microtask(() async {
       try {
-        _recordTimer?.cancel();
-        _recordTimer = null;
-        final path = await _recorder!.stop();
-        setState(() { _isRecording = false; _recordSeconds = 0; });
-        if (path != null && mounted) {
-          final p = widget.photo;
-          await context.read<AppProvider>().updatePhotoVoiceNote(
-              p.jobId, p.inspectionId, p.id, path,
-              _liveTranscription.isNotEmpty ? _liveTranscription : null);
-          setState(() {});
-        }
-      } catch (_) {
-        setState(() { _isRecording = false; });
-      }
-    } else {
-      _ensureRecorder();
+        final avail = await _speech.initialize(onError: (_) {}, onStatus: (_) {});
+        if (mounted) setState(() => _speechAvail = avail);
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      try { await _speech.stop(); } catch (_) {}
+      setState(() => _isListening = false);
+    } else if (_speechAvail) {
       try {
-        final hasPermission = await _recorder!.hasPermission();
-        if (!hasPermission) return;
-        final recordPath = kIsWeb
-            ? 'voice_${DateTime.now().millisecondsSinceEpoch}.webm'
-            : '${(await getApplicationDocumentsDirectory()).path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        await _recorder!.start(
-            const RecordConfig(encoder: AudioEncoder.aacLc),
-            path: recordPath);
-        setState(() { _isRecording = true; _liveTranscription = ''; _recordSeconds = 0; });
-        _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() => _recordSeconds++);
-        });
+        await _speech.listen(
+          onResult: (r) {
+            if (mounted && r.recognizedWords.isNotEmpty) {
+              setState(() => _notesCtrl.text = r.recognizedWords);
+            }
+          },
+          listenOptions: SpeechListenOptions(cancelOnError: false, partialResults: true),
+        );
+        setState(() => _isListening = true);
       } catch (_) {}
     }
   }
 
+  Future<void> _saveNotes() async {
+    final text = _notesCtrl.text.trim();
+    if (!mounted) return;
+    final p = widget.photo;
+    await context.read<AppProvider>().updatePhotoVoiceNote(
+        p.jobId, p.inspectionId, p.id, null,
+        text.isNotEmpty ? text : null);
+    setState(() { _editingNotes = false; _isListening = false; });
+    try { await _speech.stop(); } catch (_) {}
+  }
+
   @override
   void dispose() {
-    _player?.dispose();
-    _recordTimer?.cancel();
-    _recorder?.dispose();
+    _notesCtrl.dispose();
+    try { _speech.cancel(); } catch (_) {}
     super.dispose();
   }
 
@@ -465,8 +438,8 @@ class _PhotoPageState extends State<_PhotoPage> {
   Widget _buildVoiceCard(InspectionPhoto photo) {
     final hasNote = photo.transcription != null && photo.transcription!.isNotEmpty;
 
-    // No note → show add notes prompt
-    if (!hasNote && !_isRecording) {
+    // Inline notes editor (no note yet, or editing)
+    if (!hasNote || _editingNotes) {
       return GlassCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,50 +448,76 @@ class _PhotoPageState extends State<_PhotoPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('NOTES',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.outline,
-                        letterSpacing: 0.5)),
-                GestureDetector(
-                  onTap: widget.onEditTranscription,
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.edit_outlined, color: AppColors.outline, size: 13),
-                    SizedBox(width: 4),
-                    Text('EDIT',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.outline)),
-                  ]),
-                ),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                        color: AppColors.outline, letterSpacing: 0.5)),
+                if (_editingNotes)
+                  GestureDetector(
+                    onTap: () => setState(() { _editingNotes = false; _isListening = false; try { _speech.stop(); } catch (_) {} }),
+                    child: const Text('CANCEL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.outline)),
+                  ),
               ],
             ),
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: _toggleRecord,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: AppColors.outlineVariant.withOpacity(0.5)),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _isListening
+                    ? AppColors.primary.withOpacity(0.5)
+                    : AppColors.outlineVariant.withOpacity(0.4)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: _toggleListening,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _isListening
+                              ? AppColors.primary.withOpacity(0.2)
+                              : AppColors.surfaceContainerHighest,
+                          border: Border.all(color: _isListening ? AppColors.primary : AppColors.outlineVariant),
+                        ),
+                        child: Icon(_isListening ? Icons.stop : Icons.mic,
+                            color: _isListening ? AppColors.primary : AppColors.outline, size: 16),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _notesCtrl,
+                      autofocus: !hasNote,
+                      style: const TextStyle(color: AppColors.onSurface, fontSize: 13, height: 1.5),
+                      cursorColor: AppColors.primary,
+                      maxLines: 4, minLines: 2,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: _isListening ? 'Listening… speak now' : 'Tap 🎤 or type notes…',
+                        hintStyle: const TextStyle(color: AppColors.outline, fontSize: 12, fontStyle: FontStyle.italic),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saveNotes,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryContainer,
+                  foregroundColor: AppColors.onPrimaryContainer,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.mic_outlined,
-                        color: AppColors.outline, size: 18),
-                    SizedBox(width: 8),
-                    Text('TAP TO ADD NOTES',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.outline,
-                            letterSpacing: 0.4)),
-                  ],
-                ),
+                child: const Text('SAVE NOTES', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
               ),
             ),
           ],
@@ -541,7 +540,10 @@ class _PhotoPageState extends State<_PhotoPage> {
                       color: AppColors.outline,
                       letterSpacing: 0.5)),
               GestureDetector(
-                onTap: widget.onEditTranscription,
+                onTap: () {
+                  _notesCtrl.text = photo.transcription ?? '';
+                  setState(() => _editingNotes = true);
+                },
                 child: const Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.edit_outlined, color: AppColors.outline, size: 13),
                   SizedBox(width: 4),
