@@ -347,8 +347,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                 onTap: _toggleListening,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
+                  child: Container(
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(

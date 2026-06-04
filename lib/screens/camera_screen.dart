@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../models/inspection.dart';
 import '../models/inspection_photo.dart';
@@ -177,22 +175,8 @@ class _CameraScreenState extends State<CameraScreen>
         }
         if (file == null || !mounted) return;
 
-        // Copy to permanent app storage — iOS temp files can be cleaned
-        String imagePath = file.path;
-        if (!kIsWeb) {
-          try {
-            final dir = await getApplicationDocumentsDirectory();
-            final photoDir = Directory('${dir.path}/site_memo_photos');
-            if (!await photoDir.exists()) {
-              await photoDir.create(recursive: true);
-            }
-            final dest =
-                '${photoDir.path}/photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-            await File(file.path).copy(dest);
-            imagePath = dest;
-          } catch (_) {}
-        }
-
+        // Use path directly — camera plugin path is stable for the session
+        final imagePath = file.path;
         if (!mounted) return;
         setState(() => _lastThumb = imagePath);
 
