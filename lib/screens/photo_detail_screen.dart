@@ -80,18 +80,8 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                   .read<AppProvider>()
                   .deletePhoto(p.jobId, p.inspectionId, p.id);
               if (dCtx.mounted) Navigator.pop(dCtx);
-              if (context.mounted) {
-                if (widget.photos.length == 1) {
-                  Navigator.pop(context);
-                } else {
-                  setState(() {
-                    widget.photos.remove(p);
-                    if (_currentIdx >= widget.photos.length) {
-                      _currentIdx = widget.photos.length - 1;
-                    }
-                  });
-                }
-              }
+              // Always pop back — let parent screen handle the updated list
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text('DELETE',
                 style: TextStyle(
@@ -323,7 +313,8 @@ class _PhotoPage extends StatefulWidget {
 }
 
 class _PhotoPageState extends State<_PhotoPage> {
-  final _player = AudioPlayer();
+  // Lazy — playback no longer shown in UI but kept for compatibility
+  AudioPlayer? _player;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -338,18 +329,7 @@ class _PhotoPageState extends State<_PhotoPage> {
   @override
   void initState() {
     super.initState();
-    _player.onPositionChanged
-        .listen((p) => setState(() => _position = p));
-    _player.onDurationChanged
-        .listen((d) => setState(() => _duration = d));
-    _player.onPlayerComplete.listen((_) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-          _position = Duration.zero;
-        });
-      }
-    });
+    // AudioPlayer is lazy — not created until playback is requested
   }
 
   void _ensureRecorder() {
@@ -358,11 +338,12 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   Future<void> _togglePlay() async {
     if (widget.photo.voiceNotePath == null) return;
+    _player ??= AudioPlayer();
     if (_isPlaying) {
-      await _player.pause();
+      await _player!.pause();
       setState(() => _isPlaying = false);
     } else {
-      await _player.play(DeviceFileSource(widget.photo.voiceNotePath!));
+      await _player!.play(DeviceFileSource(widget.photo.voiceNotePath!));
       setState(() => _isPlaying = true);
     }
   }
@@ -405,7 +386,7 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   @override
   void dispose() {
-    _player.dispose();
+    _player?.dispose();
     _recordTimer?.cancel();
     _recorder?.dispose();
     super.dispose();
