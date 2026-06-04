@@ -482,9 +482,9 @@ class _PhotoPageState extends State<_PhotoPage> {
   }
 
   Widget _buildVoiceCard(InspectionPhoto photo) {
-    final hasNote = photo.voiceNotePath != null || photo.transcription != null;
+    final hasNote = photo.transcription != null && photo.transcription!.isNotEmpty;
 
-    // No note, not recording → show add button
+    // No note → show add notes prompt
     if (!hasNote && !_isRecording) {
       return GlassCard(
         child: Column(
@@ -493,7 +493,7 @@ class _PhotoPageState extends State<_PhotoPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('VOICE NOTE',
+                const Text('NOTES',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -530,7 +530,7 @@ class _PhotoPageState extends State<_PhotoPage> {
                     Icon(Icons.mic_outlined,
                         color: AppColors.outline, size: 18),
                     SizedBox(width: 8),
-                    Text('TAP TO ADD VOICE NOTE',
+                    Text('TAP TO ADD NOTES',
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -545,67 +545,7 @@ class _PhotoPageState extends State<_PhotoPage> {
       );
     }
 
-    // Recording in progress
-    if (_isRecording) {
-      return GlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('VOICE NOTE',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.outline,
-                        letterSpacing: 0.5)),
-                GestureDetector(
-                  onTap: _toggleRecord,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.errorContainer.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(
-                          color: AppColors.error.withOpacity(0.4)),
-                    ),
-                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.stop, color: AppColors.error, size: 14),
-                      SizedBox(width: 4),
-                      Text('STOP',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.error)),
-                    ]),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            WaveformVisualizer(isActive: true, barCount: 14, height: 24),
-            if (_liveTranscription.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(_liveTranscription,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.onSurface,
-                      fontStyle: FontStyle.italic,
-                      height: 1.5)),
-            ],
-          ],
-        ),
-      );
-    }
-
-    // Has note — show playback + transcription
-    final progress = _duration.inMilliseconds > 0
-        ? (_position.inMilliseconds / _duration.inMilliseconds)
-            .clamp(0.0, 1.0)
-        : 0.0;
-
+    // Has note — show notes text with edit button
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -613,7 +553,7 @@ class _PhotoPageState extends State<_PhotoPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('VOICE NOTE',
+              const Text('NOTES',
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -622,8 +562,7 @@ class _PhotoPageState extends State<_PhotoPage> {
               GestureDetector(
                 onTap: widget.onEditTranscription,
                 child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.edit_outlined,
-                      color: AppColors.outline, size: 13),
+                  Icon(Icons.edit_outlined, color: AppColors.outline, size: 13),
                   SizedBox(width: 4),
                   Text('EDIT',
                       style: TextStyle(
@@ -635,63 +574,12 @@ class _PhotoPageState extends State<_PhotoPage> {
             ],
           ),
           const SizedBox(height: 10),
-          if (photo.caption != null && photo.caption!.isNotEmpty) ...[
-            Text(photo.caption!,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface)),
-            const SizedBox(height: 8),
-          ],
           if (photo.transcription != null && photo.transcription!.isNotEmpty)
             Text(photo.transcription!,
                 style: const TextStyle(
                     fontSize: 14,
                     color: AppColors.onSurface,
                     height: 1.5)),
-          if (photo.voiceNotePath != null) ...[
-            const SizedBox(height: 12),
-            Row(children: [
-              GestureDetector(
-                onTap: _togglePlay,
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.surfaceContainerHigh,
-                  ),
-                  child: Icon(
-                      _isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: AppColors.primary,
-                      size: 18),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: AppColors.surfaceContainerHighest,
-                    valueColor: const AlwaysStoppedAnimation(
-                        AppColors.primaryFixedDim),
-                    minHeight: 4,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(_fmtDur(_position),
-                  style: const TextStyle(
-                      fontSize: 10, color: AppColors.outline)),
-            ]),
-            const SizedBox(height: 6),
-            WaveformVisualizer(
-                isActive: _isPlaying,
-                barCount: 20,
-                height: 24,
-                color: AppColors.primaryFixedDim.withOpacity(0.6)),
-          ],
         ],
       ),
     );

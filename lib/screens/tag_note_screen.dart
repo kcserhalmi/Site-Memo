@@ -1,9 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../models/inspection_photo.dart';
 import '../providers/app_provider.dart';
@@ -47,16 +45,11 @@ IconData _iconForCategory(String cat) {
 class _TagNoteScreenState extends State<TagNoteScreen> {
   List<String> _jobCategories = [];
   late String _selectedCat;
-  final _captionCtrl = TextEditingController();
-  final _transcriptionCtrl = TextEditingController();
-  final _recorder = AudioRecorder();
+  final _notesCtrl = TextEditingController();
   final _speech = SpeechToText();
   bool _speechAvail = false;
-  bool _isRecording = false;
-  String? _audioPath;
+  bool _isListening = false;
   bool _isSaving = false;
-  int _recordSeconds = 0;
-  Timer? _recordTimer;
 
   @override
   void initState() {
@@ -81,59 +74,38 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   void _initSpeechBackground() {
     Future.microtask(() async {
       try {
-        final avail = await _speech.initialize(
-          onError: (_) {},
-          onStatus: (_) {},
-        );
+        final avail = await _speech.initialize(onError: (_) {}, onStatus: (_) {});
         if (mounted) setState(() => _speechAvail = avail);
       } catch (_) {}
     });
   }
 
-  Future<void> _toggleRecord() async {
-    if (_isRecording) {
-      _recordTimer?.cancel();
-      _recordTimer = null;
-      try { _audioPath = await _recorder.stop(); } catch (_) {}
+  Future<void> _toggleListening() async {
+    if (_isListening) {
       try { await _speech.stop(); } catch (_) {}
-      setState(() { _isRecording = false; _recordSeconds = 0; });
+      setState(() => _isListening = false);
     } else {
+      if (!_speechAvail) {
+        _showSnack('Speech recognition not available. Type your notes below.');
+        return;
+      }
+      final autoTranscribe = await AppPrefs.getAutoTranscribe();
+      if (!autoTranscribe) {
+        _showSnack('Auto-transcribe is off in Account settings.');
+        return;
+      }
       try {
-        final hasPermission = await _recorder.hasPermission();
-        if (!hasPermission) {
-          _showSnack('Allow microphone access in Settings to record.');
-          return;
-        }
-        final path = await getAudioRecordPath();
-        await _recorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: path,
-        );
-        // Start speech recognition if available
-        if (_speechAvail) {
-          try {
-            final autoTranscribe = await AppPrefs.getAutoTranscribe();
-            if (autoTranscribe) {
-              await _speech.listen(
-                onResult: (r) {
-                  if (mounted && r.recognizedWords.isNotEmpty) {
-                    setState(() => _transcriptionCtrl.text = r.recognizedWords);
-                  }
-                },
-                listenOptions: SpeechListenOptions(
-                  cancelOnError: false,
-                  partialResults: true,
-                ),
-              );
+        await _speech.listen(
+          onResult: (r) {
+            if (mounted && r.recognizedWords.isNotEmpty) {
+              setState(() => _notesCtrl.text = r.recognizedWords);
             }
-          } catch (_) {}
-        }
-        setState(() { _isRecording = true; _recordSeconds = 0; });
-        _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() => _recordSeconds++);
-        });
-      } catch (e) {
-        _showSnack('Could not start recording.');
+          },
+          listenOptions: SpeechListenOptions(cancelOnError: false, partialResults: true),
+        );
+        setState(() => _isListening = true);
+      } catch (_) {
+        _showSnack('Could not start speech recognition.');
       }
     }
   }
@@ -143,16 +115,14 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     if (_isSaving) return;
     setState(() => _isSaving = true);
 
-    final finalTranscription = _transcriptionCtrl.text.trim();
+    final notes = _notesCtrl.text.trim();
 
     final photo = InspectionPhoto(
       id: context.read<AppProvider>().generateId(),
       jobId: widget.jobId,
       inspectionId: widget.inspectionId,
       imagePath: widget.imagePath,
-      voiceNotePath: _audioPath,
-      transcription: finalTranscription.isNotEmpty ? finalTranscription : null,
-      caption: _captionCtrl.text.trim().isNotEmpty ? _captionCtrl.text.trim() : null,
+      transcription: notes.isNotEmpty ? notes : null,
       category: _selectedCat,
       timestamp: DateTime.now(),
     );
@@ -234,10 +204,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
 
   @override
   void dispose() {
-    _recordTimer?.cancel();
-    _recorder.dispose();
-    _captionCtrl.dispose();
-    _transcriptionCtrl.dispose();
+    _notesCtrl.dispose();
     try { _speech.cancel(); } catch (_) {}
     super.dispose();
   }
@@ -257,12 +224,10 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildPhotoPreview(),
-                    const SizedBox(height: 16),
-                    _buildCaptionField(),
                     const SizedBox(height: 20),
                     _buildCategorySection(),
-                    const SizedBox(height: 24),
-                    _buildVoiceNoteSection(),
+                    const SizedBox(height: 20),
+                    _buildNotesSection(),
                     const SizedBox(height: 32),
                     _buildSaveButton(),
                   ],
@@ -340,28 +305,99 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     );
   }
 
-  Widget _buildCaptionField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.5)),
-      ),
-      child: TextField(
-        controller: _captionCtrl,
-        style: const TextStyle(color: AppColors.onSurface, fontSize: 14),
-        cursorColor: AppColors.primary,
-        maxLines: 2,
-        minLines: 1,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(
-          hintText: 'Quick label… (e.g. "Crack near window sill")',
-          hintStyle: TextStyle(color: AppColors.outline, fontSize: 13),
-          prefixIcon: Icon(Icons.label_outline, color: AppColors.outline, size: 18),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+  Widget _buildNotesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('NOTES',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.outline,
+                    letterSpacing: 0.5)),
+            if (_notesCtrl.text.isNotEmpty)
+              GestureDetector(
+                onTap: () => setState(() => _notesCtrl.clear()),
+                child: const Text('CLEAR',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary)),
+              ),
+          ],
         ),
-      ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: _isListening
+                    ? AppColors.primary.withOpacity(0.5)
+                    : AppColors.outlineVariant.withOpacity(0.4)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Mic button — tap to dictate
+              GestureDetector(
+                onTap: _toggleListening,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isListening
+                          ? AppColors.primary.withOpacity(0.2)
+                          : AppColors.surfaceContainerHighest,
+                      border: Border.all(
+                          color: _isListening
+                              ? AppColors.primary
+                              : AppColors.outlineVariant),
+                    ),
+                    child: Icon(
+                      _isListening ? Icons.stop : Icons.mic,
+                      color: _isListening ? AppColors.primary : AppColors.outline,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+              // Notes text field
+              Expanded(
+                child: TextField(
+                  controller: _notesCtrl,
+                  style: const TextStyle(
+                      color: AppColors.onSurface,
+                      fontSize: 14,
+                      height: 1.5),
+                  cursorColor: AppColors.primary,
+                  maxLines: 5,
+                  minLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: _isListening
+                        ? 'Listening… speak now'
+                        : 'Tap 🎤 to dictate, or type your notes here…',
+                    hintStyle: const TextStyle(
+                        color: AppColors.outline,
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -451,157 +487,6 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
               ),
             ),
           ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVoiceNoteSection() {
-    final mins = (_recordSeconds ~/ 60).toString().padLeft(1, '0');
-    final secs = (_recordSeconds % 60).toString().padLeft(2, '0');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('VOICE MEMO + NOTES',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.outline,
-                    letterSpacing: 0.5)),
-            if (_audioPath != null || _transcriptionCtrl.text.isNotEmpty)
-              GestureDetector(
-                onTap: () => setState(() {
-                  _transcriptionCtrl.clear();
-                  _audioPath = null;
-                  _recordSeconds = 0;
-                }),
-                child: const Text('CLEAR',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        GlassCard(
-          child: Column(
-            children: [
-              // Record button + waveform
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: _toggleRecord,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _isRecording
-                            ? AppColors.errorContainer
-                            : AppColors.surfaceContainerHigh,
-                        boxShadow: _isRecording
-                            ? [
-                                BoxShadow(
-                                    color: AppColors.errorContainer
-                                        .withOpacity(0.4),
-                                    blurRadius: 12)
-                              ]
-                            : [],
-                      ),
-                      child: Center(
-                        child: _isRecording
-                            ? Container(
-                                width: 12,
-                                height: 12,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: AppColors.error,
-                                ),
-                              )
-                            : const Icon(Icons.mic,
-                                color: AppColors.onSurface, size: 20),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: WaveformVisualizer(
-                      isActive: _isRecording,
-                      barCount: 16,
-                      height: 36,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (_isRecording)
-                    Text('$mins:$secs',
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.error,
-                            fontFeatures: [FontFeature.tabularFigures()]))
-                  else if (_audioPath != null)
-                    const Icon(Icons.check_circle,
-                        color: AppColors.secondary, size: 18),
-                ],
-              ),
-              // Notes text field — always visible when recording or has audio
-              if (_isRecording || _audioPath != null) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _transcriptionCtrl,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.onSurface),
-                  cursorColor: AppColors.primary,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    hintText: _isRecording
-                        ? (_speechAvail ? 'Listening… speak now' : 'Recording… type notes here')
-                        : 'Edit or add notes…',
-                    hintStyle: const TextStyle(
-                        color: AppColors.outline,
-                        fontStyle: FontStyle.italic,
-                        fontSize: 13),
-                    filled: true,
-                    fillColor: const Color(0xFF181818),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.all(12),
-                  ),
-                ),
-              ] else ...[
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: _toggleRecord,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.outlineVariant.withOpacity(0.5),
-                          style: BorderStyle.solid),
-                    ),
-                    child: const Text(
-                      'Tap mic to record voice note',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.outline,
-                          fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
         ),
       ],
     );
