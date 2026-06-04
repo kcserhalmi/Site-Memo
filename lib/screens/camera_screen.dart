@@ -276,14 +276,25 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
-    final site = provider.selectedSite;
-    final insp = provider.selectedInspection;
-    final cats = insp != null && insp.categories.isNotEmpty
-        ? ['ALL', ...insp.categories]
-        : ['ALL'];
+    // Use Selector so burst-mode photo saves (notifyListeners) don't
+    // rebuild the entire camera screen — only site/inspection changes do.
     final canPop = Navigator.canPop(context);
     final canFlip = _cameras.length > 1 || kIsWeb;
+    return Selector<AppProvider, (Job?, Inspection?)>(
+      selector: (_, p) => (p.selectedSite, p.selectedInspection),
+      builder: (ctx, selection, __) {
+        final site = selection.$1;
+        final insp = selection.$2;
+        final cats = insp != null && insp.categories.isNotEmpty
+            ? ['ALL', ...insp.categories]
+            : ['ALL'];
+        return _buildBody(ctx, site, insp, cats, canPop, canFlip);
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context, Job? site, Inspection? insp,
+      List<String> cats, bool canPop, bool canFlip) {
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -533,7 +544,7 @@ class _CameraScreenState extends State<CameraScreen>
                     child: SizedBox(
                       width: 48, height: 48,
                       child: _lastThumb != null
-                          ? appImage(_lastThumb!)
+                          ? appImage(_lastThumb!, cacheWidth: 100)
                           : Container(color: AppColors.surfaceContainerHigh),
                     ),
                   ),

@@ -12,27 +12,45 @@ import 'photo_detail_screen.dart';
 class FlaggedScreen extends StatelessWidget {
   const FlaggedScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
-
-    // Gather all flagged photos with their parent context
+  static List<_FlaggedItem> _computeItems(AppProvider p) {
     final items = <_FlaggedItem>[];
-    for (final job in provider.jobs) {
+    for (final job in p.jobs) {
       for (final insp in job.inspections) {
         for (int i = 0; i < insp.photos.length; i++) {
           if (insp.photos[i].isFlagged) {
             items.add(_FlaggedItem(
-              job: job,
-              inspection: insp,
-              photo: insp.photos[i],
-              photoIndex: i + 1,
-            ));
+                job: job,
+                inspection: insp,
+                photo: insp.photos[i],
+                photoIndex: i + 1));
           }
         }
       }
     }
+    return items;
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    return Selector<AppProvider, List<_FlaggedItem>>(
+      selector: (_, p) => _computeItems(p),
+      shouldRebuild: (prev, next) =>
+          prev.length != next.length ||
+          prev.map((i) => i.photo.id).join() !=
+              next.map((i) => i.photo.id).join(),
+      builder: (context, items, _) {
+        return _FlaggedBody(items: items);
+      },
+    );
+  }
+}
+
+class _FlaggedBody extends StatelessWidget {
+  final List<_FlaggedItem> items;
+  const _FlaggedBody({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -49,7 +67,8 @@ class FlaggedScreen extends StatelessWidget {
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: AppColors.onSurface)),
-            Text('${items.length} photo${items.length == 1 ? '' : 's'} need attention',
+            Text(
+                '${items.length} photo${items.length == 1 ? '' : 's'} need attention',
                 style: const TextStyle(
                     fontSize: 11, color: AppColors.onSurfaceVariant)),
           ],
@@ -99,7 +118,6 @@ class _FlaggedCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -108,6 +126,7 @@ class _FlaggedCard extends StatelessWidget {
                 child: appImage(
                   item.photo.imagePath,
                   fit: BoxFit.cover,
+                  cacheWidth: 200,
                   fallback: Container(color: AppColors.surfaceContainerHigh),
                 ),
               ),
@@ -117,7 +136,6 @@ class _FlaggedCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Parent context
                   Row(
                     children: [
                       const Icon(Icons.business_outlined,
@@ -127,9 +145,7 @@ class _FlaggedCard extends StatelessWidget {
                         child: Text(
                           '${item.job.name}  ›  ${item.inspection.title}',
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.outline,
-                              letterSpacing: 0.1),
+                              fontSize: 11, color: AppColors.outline),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -137,7 +153,6 @@ class _FlaggedCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // Location tag
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 7, vertical: 2),
@@ -153,7 +168,6 @@ class _FlaggedCard extends StatelessWidget {
                             letterSpacing: 0.3)),
                   ),
                   const SizedBox(height: 6),
-                  // Transcription preview or date
                   if (item.photo.transcription != null &&
                       item.photo.transcription!.isNotEmpty)
                     Text(
@@ -174,7 +188,6 @@ class _FlaggedCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Unflag button
             GestureDetector(
               onTap: () => context.read<AppProvider>().toggleFlag(
                     item.photo.jobId,

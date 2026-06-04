@@ -160,20 +160,24 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                 const SizedBox(height: 4),
                 SizedBox(
                   height: 40,
-                  child: ListView.separated(
+                  child: Builder(builder: (ctx) {
+                    // Compute once per build — not per filter chip
+                    final filterCats = _filterCats(insp);
+                    final counts = <String, int>{
+                      'ALL': insp.photos.length,
+                      'FLAGGED': insp.photos.where((p) => p.isFlagged).length,
+                      for (final c in insp.categories)
+                        c: insp.photos.where((p) => p.category == c).length,
+                    };
+                    return ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _filterCats(insp).length,
+                    itemCount: filterCats.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 8),
                     itemBuilder: (_, i) {
-                      final cat = _filterCats(insp)[i];
+                      final cat = filterCats[i];
                       final active = cat == _filter;
-                      // Calculate count for display
-                      final count = cat == 'ALL'
-                          ? insp.photos.length
-                          : cat == 'FLAGGED'
-                              ? insp.photos.where((p) => p.isFlagged).length
-                              : insp.photos.where((p) => p.category == cat).length;
+                      final count = counts[cat] ?? 0;
                       final label = count > 0 ? '$cat  $count' : cat;
                     return GestureDetector(
                       onTap: () => setState(() => _filter = cat),
@@ -202,7 +206,8 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                       ),
                     );
                   },
-                ),
+                ); // ListView.separated
+                  }), // Builder
               ),
               ], // end if categories not empty
               const SizedBox(height: 8),
