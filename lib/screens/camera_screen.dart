@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../models/inspection.dart';
 import '../models/inspection_photo.dart';
@@ -156,9 +158,9 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: dispose controller FIRST, then use image_picker ────
-        // This fully releases the iOS AVCaptureSession before opening
-        // the native camera, eliminating the resource conflict crash.
+        // ── REVIEW: full defensive flow for iOS ────────────────────────
+
+        // 1. Dispose camera cleanly before opening native camera
         if (_ctrl != null) {
           final ctrlToDispose = _ctrl;
           _ctrl = null;
@@ -166,22 +168,57 @@ class _CameraScreenState extends State<CameraScreen>
           await WidgetsBinding.instance.endOfFrame;
           try { await ctrlToDispose!.dispose(); } catch (_) {}
         }
-        // Use native iOS camera via image_picker — clean session handoff
+
+        // 2. Open native camera via image_picker
         final src = _isDesktop ? ImageSource.gallery : ImageSource.camera;
-        final file = await ImagePicker().pickImage(
-            source: src, imageQuality: hq ? 100 : 82,
-            maxWidth: hq ? 4096 : 2048);
-        if (file == null || !mounted) {
+        XFile? picked;
+        try {
+          picked = await ImagePicker().pickImage(
+              source: src,
+              imageQuality: 82,
+              maxWidth: 2048);
+        } catch (e) {
           if (mounted && !_isDesktop) _initCamera();
           return;
         }
-        setState(() => _lastThumb = file.path);
+        if (picked == null || !mounted) {
+          if (mounted && !_isDesktop) _initCamera();
+          return;
+        }
+
+        // 3. Brief delay — lets iOS fully restore app state after camera
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!mounted) return;
+
+        // 4. Copy to permanent app storage so the temp path can't be cleaned
+        String imagePath = picked.path;
+        if (!kIsWeb) {
+          try {
+            final dir = await getApplicationDocumentsDirectory();
+            final photoDir = Directory('${dir.path}/site_memo_photos');
+            if (!await photoDir.exists()) {
+              await photoDir.create(recursive: true);
+            }
+            final dest =
+                '${photoDir.path}/photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+            await File(picked.path).copy(dest);
+            imagePath = dest;
+          } catch (_) {
+            // If copy fails, use original path
+          }
+        }
+
+        if (!mounted) return;
+        setState(() => _lastThumb = imagePath);
+
+        // 5. Navigate to review screen
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => TagNoteScreen(
-              imagePath: file.path,
-              jobId: site.id, inspectionId: insp.id,
+              imagePath: imagePath,
+              jobId: site.id,
+              inspectionId: insp.id,
               initialCategory: location,
             ),
           ),
