@@ -39,6 +39,10 @@ class _CameraScreenState extends State<CameraScreen>
   int _burstCount = 0; // photos taken in current burst session
   bool _burstFlash = false;
   String? _lastThumb;
+  double _zoomLevel = 1.0;
+  double _minZoom = 1.0;
+  double _maxZoom = 10.0;
+  double _baseZoom = 1.0;
 
   bool get _isDesktop {
     if (kIsWeb) return false;
@@ -73,6 +77,9 @@ class _CameraScreenState extends State<CameraScreen>
     _ctrl = CameraController(_cameras[index], ResolutionPreset.high,
         enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
     await _ctrl!.initialize();
+    _minZoom = await _ctrl!.getMinZoomLevel();
+    _maxZoom = await _ctrl!.getMaxZoomLevel();
+    _zoomLevel = _minZoom;
     if (mounted) setState(() => _cameraReady = true);
   }
 
@@ -158,26 +165,19 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: capture with controller, pause preview, navigate ───
-        // Avoids app lifecycle crash from image_picker.
-        // TagNoteScreen no longer auto-inits microphone so no conflict.
+        // ── REVIEW: capture with controller, navigate directly ─────────
+        // Camera stays live while on review screen — no pause/dispose.
         XFile? file;
         if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
-          try {
-            file = await _ctrl!.takePicture();
-          } catch (_) {}
-          // Pause preview so iOS resources stay allocated to us (no disposal)
-          try { await _ctrl!.pausePreview(); } catch (_) {}
+          try { file = await _ctrl!.takePicture(); }
+          catch (_) { return; }
         } else if (_isDesktop) {
           file = await ImagePicker().pickImage(
               source: ImageSource.gallery, imageQuality: 82, maxWidth: 2048);
         }
-        if (file == null || !mounted) {
-          try { await _ctrl?.resumePreview(); } catch (_) {}
-          return;
-        }
+        if (file == null || !mounted) return;
 
-        // Copy to permanent storage so path is stable on iOS
+        // Copy to permanent app storage — iOS temp files can be cleaned
         String imagePath = file.path;
         if (!kIsWeb) {
           try {
@@ -196,8 +196,8 @@ class _CameraScreenState extends State<CameraScreen>
         if (!mounted) return;
         setState(() => _lastThumb = imagePath);
 
-        await Navigator.push(
-          context,
+        // Use rootNavigator context to avoid Selector context invalidation
+        await Navigator.of(context, rootNavigator: false).push(
           MaterialPageRoute(
             builder: (_) => TagNoteScreen(
               imagePath: imagePath,
@@ -207,12 +207,6 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
         );
-        // Resume preview when user comes back
-        if (mounted) {
-          try { await _ctrl?.resumePreview(); } catch (_) {
-            if (!_isDesktop) _initCamera();
-          }
-        }
       }
     } finally {
       if (mounted) setState(() => _isCapturing = false);
@@ -304,25 +298,14 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Use Selector so burst-mode photo saves (notifyListeners) don't
-    // rebuild the entire camera screen — only site/inspection changes do.
+    final provider = context.watch<AppProvider>();
+    final site = provider.selectedSite;
+    final insp = provider.selectedInspection;
+    final cats = insp != null && insp.categories.isNotEmpty
+        ? ['ALL', ...insp.categories]
+        : ['ALL'];
     final canPop = Navigator.canPop(context);
     final canFlip = _cameras.length > 1 || kIsWeb;
-    return Selector<AppProvider, (Job?, Inspection?)>(
-      selector: (_, p) => (p.selectedSite, p.selectedInspection),
-      builder: (ctx, selection, __) {
-        final site = selection.$1;
-        final insp = selection.$2;
-        final cats = insp != null && insp.categories.isNotEmpty
-            ? ['ALL', ...insp.categories]
-            : ['ALL'];
-        return _buildBody(ctx, site, insp, cats, canPop, canFlip);
-      },
-    );
-  }
-
-  Widget _buildBody(BuildContext context, Job? site, Inspection? insp,
-      List<String> cats, bool canPop, bool canFlip) {
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -617,7 +600,17 @@ class _CameraScreenState extends State<CameraScreen>
 
   Widget _buildViewfinder() {
     if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
-      return CameraPreview(_ctrl!);
+      return GestureDetector(
+        onScaleStart: (_) => _baseZoom = _zoomLevel,
+        onScaleUpdate: (d) async {
+          final z = (_baseZoom * d.scale).clamp(_minZoom, _maxZoom);
+          if ((z - _zoomLevel).abs() > 0.05) {
+            setState(() => _zoomLevel = z);
+            try { await _ctrl!.setZoomLevel(z); } catch (_) {}
+          }
+        },
+        child: CameraPreview(_ctrl!),
+      );
     }
     return Container(
       color: const Color(0xFF0D0D0D),
