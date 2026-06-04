@@ -163,8 +163,13 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: capture with controller, navigate directly ─────────
-        // Camera stays live while on review screen — no pause/dispose.
+        // ── REVIEW: capture, hide preview, navigate, restore ───────────
+        // The key iOS fix: CameraPreview MUST be removed from the widget
+        // tree before pushing a new route. An active AVCaptureSession
+        // rendering while a new UIViewController is presented causes a
+        // native crash. We hide preview (cameraReady=false) so
+        // _buildViewfinder returns a plain Container, then navigate safely.
+
         XFile? file;
         if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
           try { file = await _ctrl!.takePicture(); }
@@ -175,13 +180,15 @@ class _CameraScreenState extends State<CameraScreen>
         }
         if (file == null || !mounted) return;
 
-        // Use path directly — camera plugin path is stable for the session
         final imagePath = file.path;
-        if (!mounted) return;
-        setState(() => _lastThumb = imagePath);
 
-        // Use rootNavigator context to avoid Selector context invalidation
-        await Navigator.of(context, rootNavigator: false).push(
+        // Remove CameraPreview from tree before navigation
+        setState(() { _lastThumb = imagePath; _cameraReady = false; });
+        await WidgetsBinding.instance.endOfFrame; // let frame render without preview
+
+        if (!mounted) return;
+        await Navigator.push(
+          context,
           MaterialPageRoute(
             builder: (_) => TagNoteScreen(
               imagePath: imagePath,
@@ -191,6 +198,13 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
         );
+
+        // Restore preview when returning
+        if (mounted && _ctrl != null && _ctrl!.value.isInitialized) {
+          setState(() => _cameraReady = true);
+        } else if (mounted && !_isDesktop) {
+          _initCamera();
+        }
       }
     } finally {
       if (mounted) setState(() => _isCapturing = false);
