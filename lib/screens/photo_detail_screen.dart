@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -329,6 +330,7 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   // Lazy — only created when user taps the mic
   AudioRecorder? _recorder;
+  Timer? _recordTimer;
   bool _isRecording = false;
   int _recordSeconds = 0;
   String _liveTranscription = '';
@@ -368,6 +370,8 @@ class _PhotoPageState extends State<_PhotoPage> {
   Future<void> _toggleRecord() async {
     if (_isRecording) {
       try {
+        _recordTimer?.cancel();
+        _recordTimer = null;
         final path = await _recorder!.stop();
         setState(() { _isRecording = false; _recordSeconds = 0; });
         if (path != null && mounted) {
@@ -392,23 +396,17 @@ class _PhotoPageState extends State<_PhotoPage> {
             const RecordConfig(encoder: AudioEncoder.aacLc),
             path: recordPath);
         setState(() { _isRecording = true; _liveTranscription = ''; _recordSeconds = 0; });
-        _tickRecording();
+        _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() => _recordSeconds++);
+        });
       } catch (_) {}
     }
-  }
-
-  void _tickRecording() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && _isRecording) {
-        setState(() => _recordSeconds++);
-        _tickRecording();
-      }
-    });
   }
 
   @override
   void dispose() {
     _player.dispose();
+    _recordTimer?.cancel();
     _recorder?.dispose();
     super.dispose();
   }

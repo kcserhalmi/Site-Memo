@@ -211,8 +211,10 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               ),
               ], // end if categories not empty
               const SizedBox(height: 8),
-              // Photo grid
+              // Photo grid — wrapped in RepaintBoundary so notes/tags
+              // above don't repaint when photos change
               Expanded(
+                child: RepaintBoundary(
                 child: photos.isEmpty
                     ? _EmptyPhotos(
                         onCapture: () {
@@ -239,6 +241,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                             photo: photos[i], index: i,
                             allPhotos: photos),
                       ),
+                ), // RepaintBoundary
               ),
             ],
           ),

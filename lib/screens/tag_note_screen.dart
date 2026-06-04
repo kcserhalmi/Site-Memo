@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
@@ -55,6 +56,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   String? _audioPath;
   bool _isSaving = false;
   int _recordSeconds = 0;
+  Timer? _recordTimer;
 
   @override
   void initState() {
@@ -90,6 +92,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
 
   Future<void> _toggleRecord() async {
     if (_isRecording) {
+      _recordTimer?.cancel();
+      _recordTimer = null;
       try { _audioPath = await _recorder.stop(); } catch (_) {}
       try { await _speech.stop(); } catch (_) {}
       setState(() { _isRecording = false; _recordSeconds = 0; });
@@ -125,21 +129,15 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
           } catch (_) {}
         }
         setState(() { _isRecording = true; _recordSeconds = 0; });
-        _tickRecording();
+        _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() => _recordSeconds++);
+        });
       } catch (e) {
         _showSnack('Could not start recording.');
       }
     }
   }
 
-  void _tickRecording() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && _isRecording) {
-        setState(() => _recordSeconds++);
-        _tickRecording();
-      }
-    });
-  }
 
   Future<void> _save() async {
     if (_isSaving) return;
@@ -236,6 +234,7 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
     _recorder.dispose();
     _captionCtrl.dispose();
     _transcriptionCtrl.dispose();

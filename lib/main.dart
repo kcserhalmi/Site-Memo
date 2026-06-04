@@ -7,6 +7,8 @@ import 'screens/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Cap image cache at 50MB — prevents OOM on older iPhones
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 << 20;
   if (!kIsWeb) {
     try {
       await SystemChrome.setPreferredOrientations([
