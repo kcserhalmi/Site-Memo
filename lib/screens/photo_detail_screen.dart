@@ -385,7 +385,11 @@ class _PhotoPageState extends State<_PhotoPage> {
   }
 
   Widget _buildHero(InspectionPhoto photo) {
-    return ClipRRect(
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(
+        builder: (_) => FullPhotoScreen(photo: photo),
+      )),
+      child: ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: AspectRatio(
         aspectRatio: 4 / 3,
@@ -429,9 +433,23 @@ class _PhotoPageState extends State<_PhotoPage> {
                 ],
               ]),
             ),
+            // Expand hint
+            Positioned(
+              top: 10, right: 10,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.45),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.fullscreen,
+                    color: Colors.white70, size: 18),
+              ),
+            ),
           ],
         ),
       ),
+    ), // GestureDetector
     );
   }
 
@@ -720,4 +738,87 @@ class _MetaBox extends StatelessWidget {
           ]),
         ),
       );
+}
+
+// ── Full-screen photo viewer ──────────────────────────────────────────────────
+
+class FullPhotoScreen extends StatelessWidget {
+  final InspectionPhoto photo;
+  const FullPhotoScreen({super.key, required this.photo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          InteractiveViewer(
+            minScale: 1.0,
+            maxScale: 5.0,
+            child: Center(child: appImage(photo.imagePath, fit: BoxFit.contain)),
+          ),
+          // Back button
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Bottom overlay
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.85), Colors.transparent],
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 40, 20, 0),
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.4)),
+                      ),
+                      child: Text(photo.category,
+                          style: const TextStyle(color: AppColors.primary,
+                              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+                    ),
+                    if (photo.transcription != null && photo.transcription!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(photo.transcription!,
+                          style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5)),
+                    ],
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

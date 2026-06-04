@@ -41,6 +41,9 @@ class _CameraScreenState extends State<CameraScreen>
   double _minZoom = 1.0;
   double _maxZoom = 10.0;
   double _baseZoom = 1.0;
+  // Tap-to-focus indicator
+  Offset? _focusPoint;
+  bool _showFocus = false;
 
   bool get _isDesktop {
     if (kIsWeb) return false;
@@ -459,31 +462,66 @@ class _CameraScreenState extends State<CameraScreen>
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // Active location tag
+                        // Active location tag — tap to pick from list
                         Expanded(
-                          child: GlassCard(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            borderRadius: BorderRadius.circular(99),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.location_on_outlined,
-                                    color: AppColors.primaryFixedDim, size: 12),
-                                const SizedBox(width: 5),
-                                Expanded(
-                                  child: Text(
-                                    _activeLocation(insp),
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
-                                        letterSpacing: 0.3),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                          child: PopupMenuButton<int>(
+                            enabled: insp?.categories.isNotEmpty ?? false,
+                            color: AppColors.surfaceContainerHigh,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            onSelected: (i) => setState(() => _catIndex = i + 1),
+                            itemBuilder: (_) => [
+                              for (int i = 0; i < (insp?.categories.length ?? 0); i++)
+                                PopupMenuItem<int>(
+                                  value: i,
+                                  child: Row(children: [
+                                    Icon(
+                                      _catIndex == i + 1
+                                          ? Icons.location_on
+                                          : Icons.location_on_outlined,
+                                      color: _catIndex == i + 1
+                                          ? AppColors.primary
+                                          : AppColors.outline,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(insp?.categories[i] ?? '',
+                                        style: TextStyle(
+                                            color: _catIndex == i + 1
+                                                ? AppColors.primary
+                                                : AppColors.onSurface,
+                                            fontWeight: _catIndex == i + 1
+                                                ? FontWeight.w700
+                                                : FontWeight.w400)),
+                                  ]),
                                 ),
-                              ],
+                            ],
+                            child: GlassCard(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              borderRadius: BorderRadius.circular(99),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.location_on_outlined,
+                                      color: AppColors.primaryFixedDim, size: 12),
+                                  const SizedBox(width: 5),
+                                  Expanded(
+                                    child: Text(
+                                      _activeLocation(insp),
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                          letterSpacing: 0.3),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const Icon(Icons.arrow_drop_down,
+                                      color: AppColors.outline, size: 14),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -598,16 +636,63 @@ class _CameraScreenState extends State<CameraScreen>
 
   Widget _buildViewfinder() {
     if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
-      return GestureDetector(
-        onScaleStart: (_) => _baseZoom = _zoomLevel,
-        onScaleUpdate: (d) async {
-          final z = (_baseZoom * d.scale).clamp(_minZoom, _maxZoom);
-          if ((z - _zoomLevel).abs() > 0.05) {
-            setState(() => _zoomLevel = z);
-            try { await _ctrl!.setZoomLevel(z); } catch (_) {}
-          }
-        },
-        child: CameraPreview(_ctrl!),
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            onScaleStart: (_) => _baseZoom = _zoomLevel,
+            onScaleUpdate: (d) async {
+              if (d.pointerCount < 2) return;
+              final z = (_baseZoom * d.scale).clamp(_minZoom, _maxZoom);
+              if ((z - _zoomLevel).abs() > 0.05) {
+                setState(() => _zoomLevel = z);
+                try { await _ctrl!.setZoomLevel(z); } catch (_) {}
+              }
+            },
+            onTapUp: (d) async {
+              final size = _ctrl!.value.previewSize;
+              if (size == null) return;
+              // Normalize tap position to 0-1 range
+              final renderBox = context.findRenderObject() as RenderBox?;
+              if (renderBox == null) return;
+              final localPos = d.localPosition;
+              final w = renderBox.size.width;
+              final h = renderBox.size.height;
+              final x = (localPos.dx / w).clamp(0.0, 1.0);
+              final y = (localPos.dy / h).clamp(0.0, 1.0);
+              try {
+                await _ctrl!.setFocusMode(FocusMode.auto);
+                await _ctrl!.setFocusPoint(Offset(x, y));
+                await _ctrl!.setExposurePoint(Offset(x, y));
+              } catch (_) {}
+              setState(() { _focusPoint = localPos; _showFocus = true; });
+              Future.delayed(const Duration(milliseconds: 1200), () {
+                if (mounted) setState(() => _showFocus = false);
+              });
+            },
+            child: CameraPreview(_ctrl!),
+          ),
+          // Focus indicator square
+          if (_showFocus && _focusPoint != null)
+            Positioned(
+              left: _focusPoint!.dx - 28,
+              top: _focusPoint!.dy - 28,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _showFocus ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                          color: AppColors.primaryContainer, width: 1.5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
     }
     return Container(
