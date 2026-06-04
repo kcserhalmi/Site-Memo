@@ -158,40 +158,27 @@ class _CameraScreenState extends State<CameraScreen>
           if (mounted) setState(() => _burstFlash = false);
         });
       } else {
-        // ── REVIEW: full defensive flow for iOS ────────────────────────
-
-        // 1. Dispose camera cleanly before opening native camera
-        if (_ctrl != null) {
-          final ctrlToDispose = _ctrl;
-          _ctrl = null;
-          if (mounted) setState(() => _cameraReady = false);
-          await WidgetsBinding.instance.endOfFrame;
-          try { await ctrlToDispose!.dispose(); } catch (_) {}
+        // ── REVIEW: capture with controller, pause preview, navigate ───
+        // Avoids app lifecycle crash from image_picker.
+        // TagNoteScreen no longer auto-inits microphone so no conflict.
+        XFile? file;
+        if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
+          try {
+            file = await _ctrl!.takePicture();
+          } catch (_) {}
+          // Pause preview so iOS resources stay allocated to us (no disposal)
+          try { await _ctrl!.pausePreview(); } catch (_) {}
+        } else if (_isDesktop) {
+          file = await ImagePicker().pickImage(
+              source: ImageSource.gallery, imageQuality: 82, maxWidth: 2048);
         }
-
-        // 2. Open native camera via image_picker
-        final src = _isDesktop ? ImageSource.gallery : ImageSource.camera;
-        XFile? picked;
-        try {
-          picked = await ImagePicker().pickImage(
-              source: src,
-              imageQuality: 82,
-              maxWidth: 2048);
-        } catch (e) {
-          if (mounted && !_isDesktop) _initCamera();
-          return;
-        }
-        if (picked == null || !mounted) {
-          if (mounted && !_isDesktop) _initCamera();
+        if (file == null || !mounted) {
+          try { await _ctrl?.resumePreview(); } catch (_) {}
           return;
         }
 
-        // 3. Brief delay — lets iOS fully restore app state after camera
-        await Future.delayed(const Duration(milliseconds: 300));
-        if (!mounted) return;
-
-        // 4. Copy to permanent app storage so the temp path can't be cleaned
-        String imagePath = picked.path;
+        // Copy to permanent storage so path is stable on iOS
+        String imagePath = file.path;
         if (!kIsWeb) {
           try {
             final dir = await getApplicationDocumentsDirectory();
@@ -201,17 +188,14 @@ class _CameraScreenState extends State<CameraScreen>
             }
             final dest =
                 '${photoDir.path}/photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-            await File(picked.path).copy(dest);
+            await File(file.path).copy(dest);
             imagePath = dest;
-          } catch (_) {
-            // If copy fails, use original path
-          }
+          } catch (_) {}
         }
 
         if (!mounted) return;
         setState(() => _lastThumb = imagePath);
 
-        // 5. Navigate to review screen
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -223,7 +207,12 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
         );
-        if (mounted && !_isDesktop) _initCamera();
+        // Resume preview when user comes back
+        if (mounted) {
+          try { await _ctrl?.resumePreview(); } catch (_) {
+            if (!_isDesktop) _initCamera();
+          }
+        }
       }
     } finally {
       if (mounted) setState(() => _isCapturing = false);
