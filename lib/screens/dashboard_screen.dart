@@ -153,13 +153,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     }),
                     if (p.activeJobs.isNotEmpty) ...[
-                      _SectionLabel('ACTIVE'),
+                      _SectionLabel('Active'),
                       ...p.activeJobs
                           .map((j) => _JobCard(job: j, completed: false)),
                       const SizedBox(height: 16),
                     ],
                     if (p.completedJobs.isNotEmpty) ...[
-                      _SectionLabel('COMPLETED'),
+                      _SectionLabel('Completed'),
                       ...p.completedJobs
                           .map((j) => _JobCard(job: j, completed: true)),
                     ],
@@ -186,9 +186,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shadowColor: AppColors.primaryContainer.withOpacity(0.4),
             ),
             icon: const Icon(Icons.add, size: 20),
-            label: const Text('NEW SITE',
-                style:
-                    TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.8, fontSize: 13)),
+            label: const Text('New site',
+                style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.2, fontSize: 13)),
           ),
         ),
       ),
@@ -202,8 +201,7 @@ class _Header extends StatelessWidget {
   const _Header({this.onOpenAccount});
   @override
   Widget build(BuildContext context) {
-    final month =
-        DateFormat('MMM yyyy').format(DateTime.now()).toUpperCase();
+    final month = DateFormat('MMM yyyy').format(DateTime.now());
     return Consumer<AppProvider>(
       builder: (_, p, __) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -219,12 +217,12 @@ class _Header extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: AppColors.onSurface)),
                 Text(
-                  '${p.jobs.length} JOBS • $month',
+                  '${p.jobs.length} jobs · $month',
                   style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                       color: AppColors.onSurfaceVariant,
-                      letterSpacing: 0.5),
+                      letterSpacing: 0.1),
                 ),
               ],
             ),
@@ -257,12 +255,23 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10, top: 4),
-      child: Text(text,
-          style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.outline,
-              letterSpacing: 0.6)),
+      child: Row(
+        children: [
+          Text(text,
+              style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.outline,
+                  letterSpacing: 0.2)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 0.5,
+              color: AppColors.outlineVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -413,8 +422,12 @@ class _JobCard extends StatelessWidget {
                             fontSize: 13,
                             color: AppColors.onSurfaceVariant)),
                     if (!completed) ...[
-                      const SizedBox(height: 10),
-                      _StatusChip(label: 'IN PROGRESS'),
+                      const SizedBox(height: 6),
+                      const Text('in progress',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w500)),
                     ],
                   ],
                 ),
@@ -489,7 +502,7 @@ class _JobCard extends StatelessWidget {
   }
 }
 
-class _ContinueCard extends StatelessWidget {
+class _ContinueCard extends StatefulWidget {
   final String siteName;
   final String inspectionTitle;
   final int photoCount;
@@ -505,20 +518,39 @@ class _ContinueCard extends StatelessWidget {
   });
 
   @override
+  State<_ContinueCard> createState() => _ContinueCardState();
+}
+
+class _ContinueCardState extends State<_ContinueCard> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedScale(
+      scale: _pressed ? 0.97 : 1.0,
+      duration: const Duration(milliseconds: 130),
+      curve: const Cubic(0.23, 1.0, 0.32, 1.0),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.4)),
+        border: Border(
+          left: BorderSide(color: AppColors.primaryFixedDim.withOpacity(0.7), width: 3),
+          top: BorderSide(color: AppColors.outlineVariant.withOpacity(0.25)),
+          right: BorderSide(color: AppColors.outlineVariant.withOpacity(0.25)),
+          bottom: BorderSide(color: AppColors.outlineVariant.withOpacity(0.25)),
+        ),
       ),
       child: Row(
         children: [
           // Tap area
           Expanded(
             child: GestureDetector(
-              onTap: onContinue,
+              onTap: widget.onContinue,
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTapCancel: () => setState(() => _pressed = false),
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
@@ -546,14 +578,14 @@ class _ContinueCard extends StatelessWidget {
                                   color: AppColors.primaryFixedDim,
                                   letterSpacing: 0.5)),
                           const SizedBox(height: 2),
-                          Text(inspectionTitle,
+                          Text(widget.inspectionTitle,
                               style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.onSurface),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis),
-                          Text('$siteName  ·  $photoCount photos',
+                          Text('${widget.siteName}  ·  ${widget.photoCount} photos',
                               style: const TextStyle(
                                   fontSize: 11,
                                   color: AppColors.onSurfaceVariant),
@@ -571,7 +603,7 @@ class _ContinueCard extends StatelessWidget {
           ),
           // Dismiss button
           GestureDetector(
-            onTap: onDismiss,
+            onTap: widget.onDismiss,
             behavior: HitTestBehavior.opaque,
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -581,6 +613,7 @@ class _ContinueCard extends StatelessWidget {
           ),
         ],
       ),
+      ), // AnimatedScale
     );
   }
 }
@@ -620,28 +653,6 @@ class _IssueChip extends StatelessWidget {
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  final String label;
-  const _StatusChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-      ),
-      child: Text(label,
-          style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-              letterSpacing: 0.4)),
-    );
-  }
-}
 
 class _Field extends StatelessWidget {
   final TextEditingController controller;

@@ -69,18 +69,17 @@ class SiteMemoApp extends StatelessWidget {
           onSurfaceVariant: Color(0xFFD6C4AC),
           outline: Color(0xFF9E8E78),
         ),
-        fontFamily: 'Inter',
         textTheme: const TextTheme(
           headlineLarge: TextStyle(
-              fontSize: 28, fontWeight: FontWeight.w700, color: Color(0xFFE5E2E1)),
+              fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Color(0xFFE5E2E1)),
           titleMedium: TextStyle(
               fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFFE5E2E1)),
           bodyMedium: TextStyle(
               fontSize: 14, fontWeight: FontWeight.w400, color: Color(0xFFE5E2E1)),
           labelLarge: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
               color: Color(0xFFE5E2E1)),
           labelSmall: TextStyle(
               fontSize: 11,

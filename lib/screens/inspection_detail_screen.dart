@@ -244,7 +244,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                           color: active
                               ? AppColors.primaryContainer.withOpacity(0.2)
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(99),
+                          borderRadius: BorderRadius.circular(18),
                           border: Border.all(
                             color: active
                                 ? AppColors.primaryContainer
@@ -254,11 +254,11 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                         child: Text(label,
                             style: TextStyle(
                                 fontSize: 11,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                                 color: active
                                     ? AppColors.primary
                                     : AppColors.outline,
-                                letterSpacing: 0.4)),
+                                letterSpacing: 0.2)),
                       ),
                     );
                   },
@@ -377,7 +377,7 @@ class _ActionBtn extends StatelessWidget {
       );
 }
 
-class _PhotoTile extends StatelessWidget {
+class _PhotoTile extends StatefulWidget {
   final InspectionPhoto photo;
   final int index;
   final List<InspectionPhoto> allPhotos;
@@ -390,6 +390,13 @@ class _PhotoTile extends StatelessWidget {
     this.isSelecting = false, this.isSelected = false,
     required this.onLongPress, required this.onSelectTap,
   });
+
+  @override
+  State<_PhotoTile> createState() => _PhotoTileState();
+}
+
+class _PhotoTileState extends State<_PhotoTile> {
+  bool _pressed = false;
 
   Color _catColor(String cat) {
     if (cat == 'DAMAGE') return AppColors.onTertiaryContainer;
@@ -416,7 +423,7 @@ class _PhotoTile extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                       builder: (_) =>
-                          PhotoDetailScreen(photos: allPhotos, initialIndex: index)),
+                          PhotoDetailScreen(photos: widget.allPhotos, initialIndex: widget.index)),
                 );
               },
             ),
@@ -452,7 +459,7 @@ class _PhotoTile extends StatelessWidget {
                       TextButton(
                         onPressed: () async {
                           await context.read<AppProvider>().deletePhoto(
-                              photo.jobId, photo.inspectionId, photo.id);
+                              widget.photo.jobId, widget.photo.inspectionId, widget.photo.id);
                           if (dCtx.mounted) Navigator.pop(dCtx);
                         },
                         child: const Text('DELETE',
@@ -478,20 +485,27 @@ class _PhotoTile extends StatelessWidget {
     return RepaintBoundary(
       child: GestureDetector(
       onTap: () {
-        if (isSelecting) {
-          onSelectTap();
+        if (widget.isSelecting) {
+          widget.onSelectTap();
         } else {
           Navigator.push(context, MaterialPageRoute(
-              builder: (_) => PhotoDetailScreen(photos: allPhotos, initialIndex: index)));
+              builder: (_) => PhotoDetailScreen(photos: widget.allPhotos, initialIndex: widget.index)));
         }
       },
-      onLongPress: isSelecting ? null : () { onLongPress(); },
-      child: ClipRRect(
+      onLongPress: widget.isSelecting ? null : () { widget.onLongPress(); },
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 130),
+        curve: const Cubic(0.23, 1.0, 0.32, 1.0),
+        child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            appImage(photo.imagePath,
+            appImage(widget.photo.imagePath,
                 cacheWidth: 400,
                 fallback: Container(
                   color: AppColors.surfaceContainerHigh,
@@ -517,11 +531,11 @@ class _PhotoTile extends StatelessWidget {
                   color: Colors.black.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text(photo.category,
+                child: Text(widget.photo.category,
                     style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
-                        color: _catColor(photo.category),
+                        color: _catColor(widget.photo.category),
                         letterSpacing: 0.3)),
               ),
             ),
@@ -532,7 +546,7 @@ class _PhotoTile extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (photo.isFlagged)
+                  if (widget.photo.isFlagged)
                     Container(
                       margin: const EdgeInsets.only(right: 4),
                       padding: const EdgeInsets.all(4),
@@ -542,7 +556,7 @@ class _PhotoTile extends StatelessWidget {
                       ),
                       child: const Icon(Icons.flag, color: Colors.white, size: 11),
                     ),
-                  if (photo.transcription != null && photo.transcription!.isNotEmpty)
+                  if (widget.photo.transcription != null && widget.photo.transcription!.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
@@ -555,20 +569,20 @@ class _PhotoTile extends StatelessWidget {
               ),
             ),
             // Selection overlay — inside Stack children
-            if (isSelecting)
+            if (widget.isSelecting)
               Positioned.fill(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   decoration: BoxDecoration(
-                    color: isSelected
+                    color: widget.isSelected
                         ? AppColors.primaryContainer.withOpacity(0.35)
                         : Colors.black.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(10),
-                    border: isSelected
+                    border: widget.isSelected
                         ? Border.all(color: AppColors.primaryContainer, width: 2.5)
                         : null,
                   ),
-                  child: isSelected
+                  child: widget.isSelected
                       ? const Center(
                           child: Icon(Icons.check_circle,
                               color: AppColors.primaryContainer, size: 32),
@@ -578,7 +592,8 @@ class _PhotoTile extends StatelessWidget {
               ),
           ], // Stack children
         ), // Stack
-      ), // ClipRRect
+        ), // ClipRRect
+      ), // AnimatedScale
     ), // GestureDetector
     ); // RepaintBoundary
   }

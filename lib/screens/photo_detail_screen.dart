@@ -642,7 +642,7 @@ class _PhotoPageState extends State<_PhotoPage> {
 // Shared helper widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _HeaderBtn extends StatelessWidget {
+class _HeaderBtn extends StatefulWidget {
   final VoidCallback onTap;
   final String? label;
   final IconData? icon;
@@ -662,32 +662,46 @@ class _HeaderBtn extends StatelessWidget {
   });
 
   @override
+  State<_HeaderBtn> createState() => _HeaderBtnState();
+}
+
+class _HeaderBtnState extends State<_HeaderBtn> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-              horizontal: label != null ? 8 : 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: filled ? (color ?? AppColors.outline).withOpacity(0.12) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: borderColor),
+        onTap: widget.onTap,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.92 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: const Cubic(0.23, 1.0, 0.32, 1.0),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: widget.filled ? (widget.color ?? AppColors.outline).withOpacity(0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: widget.borderColor),
+            ),
+            child: widget.child ??
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.icon != null)
+                      Icon(widget.icon, color: widget.color ?? AppColors.outline, size: 13),
+                    if (widget.icon != null && widget.label != null) const SizedBox(width: 4),
+                    if (widget.label != null)
+                      Text(widget.label!,
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: widget.color ?? AppColors.outline,
+                              letterSpacing: 0.3)),
+                  ],
+                ),
           ),
-          child: child ??
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (icon != null)
-                    Icon(icon, color: color ?? AppColors.outline, size: 13),
-                  if (icon != null && label != null) const SizedBox(width: 4),
-                  if (label != null)
-                    Text(label!,
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: color ?? AppColors.outline,
-                            letterSpacing: 0.3)),
-                ],
-              ),
         ),
       );
 }
@@ -914,38 +928,41 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
 
           // ── Bottom notes overlay (hidden when UI is off) ─────────────────
           if (photo.transcription != null && photo.transcription!.isNotEmpty)
-            AnimatedOpacity(
-              opacity: _showUI ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: Positioned(
+            Positioned(
               bottom: 0, left: 0, right: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.82), Colors.transparent],
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 48, 20, 0),
-                child: SafeArea(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(photo.transcription!,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              height: 1.6,
-                              shadows: [Shadow(color: Colors.black54, blurRadius: 8)])),
-                      const SizedBox(height: 16),
-                    ],
+              child: IgnorePointer(
+                ignoring: !_showUI,
+                child: AnimatedOpacity(
+                  opacity: _showUI ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Colors.black.withOpacity(0.82), Colors.transparent],
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 48, 20, 0),
+                    child: SafeArea(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(photo.transcription!,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  height: 1.6,
+                                  shadows: [Shadow(color: Colors.black54, blurRadius: 8)])),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
             ), // Positioned
-            ), // AnimatedOpacity
         ],
       ),
     );

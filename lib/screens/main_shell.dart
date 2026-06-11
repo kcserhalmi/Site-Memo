@@ -61,14 +61,17 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 64,
+      height: 68,
       decoration: BoxDecoration(
         color: AppColors.surfaceContainer,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        border: Border(
+          top: BorderSide(color: Colors.white.withOpacity(0.07), width: 0.5),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 16,
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 20,
             offset: const Offset(0, -4),
           ),
         ],
@@ -86,7 +89,7 @@ class _BottomNav extends StatelessWidget {
   }
 }
 
-class _NavItem extends StatelessWidget {
+class _NavItem extends StatefulWidget {
   final IconData icon;
   final IconData filledIcon;
   final String label;
@@ -102,22 +105,50 @@ class _NavItem extends StatelessWidget {
   });
 
   @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.outline;
+    final color = widget.selected ? AppColors.primary : AppColors.outline;
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
       behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 70,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(selected ? filledIcon : icon, color: color, size: 24),
-            const SizedBox(height: 2),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w500, color: color)),
-          ],
+      child: AnimatedScale(
+        scale: _pressed ? 0.90 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: const Cubic(0.23, 1.0, 0.32, 1.0),
+        child: SizedBox(
+          width: 70,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(widget.selected ? widget.filledIcon : widget.icon, color: color, size: 22),
+              const SizedBox(height: 5),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                width: widget.selected ? 20 : 4,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: widget.selected ? AppColors.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(1.5),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(widget.label,
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w500,
+                      color: color)),
+            ],
+          ),
         ),
       ),
     );
