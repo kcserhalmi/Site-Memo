@@ -338,6 +338,21 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updatePhotoCategory(
+      String jobId, String inspectionId, String photoId, String category) async {
+    final ji = _jobs.indexWhere((j) => j.id == jobId);
+    if (ji == -1) return;
+    final ii =
+        _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
+    if (ii == -1) return;
+    final pi = _jobs[ji].inspections[ii].photos
+        .indexWhere((p) => p.id == photoId);
+    if (pi == -1) return;
+    _jobs[ji].inspections[ii].photos[pi].category = category;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> updatePhotoVoiceNote(String jobId, String inspectionId,
       String photoId, String? voiceNotePath, String? transcription) async {
     final ji = _jobs.indexWhere((j) => j.id == jobId);

@@ -12,6 +12,21 @@ import '../widgets/glass_card.dart';
 import '../widgets/waveform_visualizer.dart';
 import 'photo_annotation_screen.dart';
 
+IconData _iconForCategory(String cat) {
+  switch (cat.toUpperCase()) {
+    case 'EXTERIOR': return Icons.home_outlined;
+    case 'STRUCTURAL': return Icons.grid_view_outlined;
+    case 'DAMAGE': return Icons.warning_amber_outlined;
+    case 'INTERIOR': return Icons.crop_square_outlined;
+    case 'FOUNDATION': return Icons.layers_outlined;
+    case 'ELECTRICAL': return Icons.electrical_services_outlined;
+    case 'PLUMBING': return Icons.plumbing_outlined;
+    case 'ROOFING': return Icons.roofing_outlined;
+    case 'SAFETY': return Icons.health_and_safety_outlined;
+    default: return Icons.label_outline;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Outer widget — owns navigation, app bar, and PageView
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,12 +202,43 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     );
   }
 
+  Future<void> _changeCategory() async {
+    final p = _photo;
+    final provider = context.read<AppProvider>();
+    final job = provider.jobs.firstWhere((j) => j.id == p.jobId,
+        orElse: () => provider.jobs.first);
+    final insp = job.inspections.firstWhere((i) => i.id == p.inspectionId,
+        orElse: () => job.inspections.first);
+    final categories =
+        insp.categories.isNotEmpty ? insp.categories : <String>['UNTAGGED'];
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) =>
+          _CategoryPickerSheet(categories: categories, current: p.category),
+    );
+
+    if (selected != null && selected != p.category && mounted) {
+      await context
+          .read<AppProvider>()
+          .updatePhotoCategory(p.jobId, p.inspectionId, p.id, selected);
+      if (mounted) setState(() {});
+    }
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final isFlagged = _photo.isFlagged;
-    return Scaffold(
+    return GestureDetector(
+      // Tap anywhere outside text fields to dismiss keyboard
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
@@ -279,6 +325,7 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                   photo: widget.photos[i],
                   photoIndex: i + 1,
                   onEditTranscription: _editTranscription,
+                  onChangeCategory: _changeCategory,
                   onFullScreen: () => Navigator.push(context, MaterialPageRoute(
                     builder: (_) => FullPhotoScreen(
                       photos: widget.photos,
@@ -291,7 +338,8 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
           ],
         ),
       ),
-    );
+    ), // Scaffold
+    ); // GestureDetector
   }
 }
 
@@ -303,6 +351,7 @@ class _PhotoPage extends StatefulWidget {
   final InspectionPhoto photo;
   final int photoIndex;
   final VoidCallback onEditTranscription;
+  final VoidCallback onChangeCategory;
   final VoidCallback onFullScreen;
 
   const _PhotoPage({
@@ -310,6 +359,7 @@ class _PhotoPage extends StatefulWidget {
     required this.photo,
     required this.photoIndex,
     required this.onEditTranscription,
+    required this.onChangeCategory,
     required this.onFullScreen,
   });
 
@@ -358,6 +408,7 @@ class _PhotoPageState extends State<_PhotoPage> {
   Future<void> _saveNotes() async {
     final text = _notesCtrl.text.trim();
     if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     final p = widget.photo;
     await context.read<AppProvider>().updatePhotoVoiceNote(
         p.jobId, p.inspectionId, p.id, null,
@@ -377,6 +428,7 @@ class _PhotoPageState extends State<_PhotoPage> {
   Widget build(BuildContext context) {
     final photo = widget.photo;
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
       child: Column(
         children: [
@@ -476,7 +528,11 @@ class _PhotoPageState extends State<_PhotoPage> {
                         color: AppColors.outline, letterSpacing: 0.5)),
                 if (_editingNotes)
                   GestureDetector(
-                    onTap: () => setState(() { _editingNotes = false; _isListening = false; try { _speech.stop(); } catch (_) {} }),
+                    onTap: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      setState(() { _editingNotes = false; _isListening = false; });
+                      try { _speech.stop(); } catch (_) {}
+                    },
                     child: const Text('CANCEL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.outline)),
                   ),
               ],
@@ -608,6 +664,7 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   Widget _buildLocationCard(InspectionPhoto photo) {
     return GlassCard(
+      onTap: widget.onChangeCategory,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -984,4 +1041,53 @@ class _Bubble extends StatelessWidget {
         ),
         child: child,
       );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Category (location tag) picker — bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CategoryPickerSheet extends StatelessWidget {
+  final List<String> categories;
+  final String current;
+  const _CategoryPickerSheet({required this.categories, required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text('CHANGE LOCATION TAG',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.outline,
+                    letterSpacing: 0.5)),
+          ),
+          ...categories.map((cat) {
+            final active = cat == current;
+            final isDamage = cat == 'DAMAGE';
+            final activeColor =
+                isDamage ? AppColors.onTertiaryContainer : AppColors.primary;
+            return ListTile(
+              onTap: () => Navigator.pop(context, cat),
+              leading: Icon(_iconForCategory(cat),
+                  color: active ? activeColor : AppColors.outline),
+              title: Text(cat,
+                  style: TextStyle(
+                      color: active ? activeColor : AppColors.onSurface,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
+              trailing:
+                  active ? Icon(Icons.check, color: activeColor) : null,
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
 }
