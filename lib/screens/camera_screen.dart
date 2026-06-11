@@ -556,7 +556,6 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
-          const _Reticle(),
           // Category strip
           Positioned(
             bottom: 96, left: 0, right: 0,
@@ -901,54 +900,6 @@ class _SiteSelectorSheetState extends State<_SiteSelectorSheet> {
 }
 
 // ── Camera UI helpers ─────────────────────────────────────────────────────────
-
-class _Reticle extends StatelessWidget {
-  const _Reticle();
-  @override
-  Widget build(BuildContext context) => Center(
-        child: SizedBox(
-          width: 180, height: 180,
-          child: Stack(children: [
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: AppColors.primary.withOpacity(0.35), width: 1.5),
-              ),
-            ),
-            _c(true, true), _c(true, false), _c(false, true), _c(false, false),
-          ]),
-        ),
-      );
-
-  Widget _c(bool top, bool left) => Positioned(
-        top: top ? -1 : null, bottom: top ? null : -1,
-        left: left ? -1 : null, right: left ? null : -1,
-        child: SizedBox(
-          width: 20, height: 20,
-          child: CustomPaint(painter: _CP(top: top, left: left)),
-        ),
-      );
-}
-
-class _CP extends CustomPainter {
-  final bool top, left;
-  const _CP({required this.top, required this.left});
-  @override
-  void paint(Canvas c, Size s) {
-    final p = Paint()
-      ..color = AppColors.primary
-      ..strokeWidth = 3.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final x = left ? 0.0 : s.width;
-    final y = top ? 0.0 : s.height;
-    c.drawLine(Offset(x, y), Offset(x + (left ? s.width : -s.width), y), p);
-    c.drawLine(Offset(x, y), Offset(x, y + (top ? s.height : -s.height)), p);
-  }
-  @override
-  bool shouldRepaint(_) => false;
-}
 
 class _GridPainter extends CustomPainter {
   @override

@@ -260,44 +260,55 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                               color: AppColors.onSurface)),
                     ]),
                   ),
-                  const Spacer(),
-                  // Delete
-                  _HeaderBtn(
-                    onTap: () => _confirmDelete(context),
-                    child: const Icon(Icons.delete_outline,
-                        color: AppColors.error, size: 16),
-                    borderColor: AppColors.error.withOpacity(0.3),
-                  ),
-                  const SizedBox(width: 6),
-                  // Annotate
-                  _HeaderBtn(
-                    onTap: _openAnnotation,
-                    label: 'ANNOTATE',
-                    icon: Icons.draw_outlined,
-                    borderColor: AppColors.outline.withOpacity(0.3),
-                    color: AppColors.outline,
-                  ),
-                  const SizedBox(width: 6),
-                  // Flag
-                  _HeaderBtn(
-                    onTap: _toggleFlag,
-                    label: isFlagged ? 'FLAGGED' : 'FLAG',
-                    icon: isFlagged ? Icons.flag : Icons.flag_outlined,
-                    borderColor: isFlagged
-                        ? AppColors.onTertiaryContainer
-                        : AppColors.outline.withOpacity(0.3),
-                    color: isFlagged
-                        ? AppColors.onTertiaryContainer
-                        : AppColors.outline,
-                    filled: isFlagged,
-                  ),
-                  const SizedBox(width: 6),
-                  // Share
-                  _HeaderBtn(
-                    onTap: _share,
-                    label: 'SHARE',
-                    borderColor: AppColors.primary.withOpacity(0.3),
-                    color: AppColors.primary,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Delete
+                          _HeaderBtn(
+                            onTap: () => _confirmDelete(context),
+                            child: const Icon(Icons.delete_outline,
+                                color: AppColors.error, size: 16),
+                            borderColor: AppColors.error.withOpacity(0.3),
+                          ),
+                          const SizedBox(width: 6),
+                          // Annotate
+                          _HeaderBtn(
+                            onTap: _openAnnotation,
+                            label: 'ANNOTATE',
+                            icon: Icons.draw_outlined,
+                            borderColor: AppColors.outline.withOpacity(0.3),
+                            color: AppColors.outline,
+                          ),
+                          const SizedBox(width: 6),
+                          // Flag
+                          _HeaderBtn(
+                            onTap: _toggleFlag,
+                            label: isFlagged ? 'FLAGGED' : 'FLAG',
+                            icon: isFlagged ? Icons.flag : Icons.flag_outlined,
+                            borderColor: isFlagged
+                                ? AppColors.onTertiaryContainer
+                                : AppColors.outline.withOpacity(0.3),
+                            color: isFlagged
+                                ? AppColors.onTertiaryContainer
+                                : AppColors.outline,
+                            filled: isFlagged,
+                          ),
+                          const SizedBox(width: 6),
+                          // Share
+                          _HeaderBtn(
+                            onTap: _share,
+                            label: 'SHARE',
+                            borderColor: AppColors.primary.withOpacity(0.3),
+                            color: AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -570,7 +581,6 @@ class _PhotoPageState extends State<_PhotoPage> {
                   Expanded(
                     child: TextField(
                       controller: _notesCtrl,
-                      autofocus: !hasNote,
                       style: const TextStyle(color: AppColors.onSurface, fontSize: 13, height: 1.5),
                       cursorColor: AppColors.primary,
                       maxLines: 4, minLines: 2,
@@ -833,6 +843,19 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
   late int _current;
   bool _showUI = true; // tap to toggle UI visibility
 
+  // Swipe-down-to-dismiss
+  final Map<int, TransformationController> _transformCtrls = {};
+  final Set<int> _activePointers = {};
+  Offset _dragStart = Offset.zero;
+  double _dragDy = 0;
+  bool _dragging = false;
+
+  TransformationController _transformCtrlFor(int i) =>
+      _transformCtrls.putIfAbsent(i, () => TransformationController());
+
+  bool get _isZoomed =>
+      (_transformCtrls[_current]?.value.getMaxScaleOnAxis() ?? 1.0) > 1.01;
+
   @override
   void initState() {
     super.initState();
@@ -843,7 +866,48 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
   @override
   void dispose() {
     _ctrl.dispose();
+    for (final c in _transformCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _activePointers.add(e.pointer);
+    if (_activePointers.length == 1) {
+      _dragStart = e.position;
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (_activePointers.length != 1 || _isZoomed) {
+      if (_dragging) setState(() { _dragging = false; _dragDy = 0; });
+      return;
+    }
+    final delta = e.position - _dragStart;
+    if (!_dragging) {
+      if (delta.dy > 12 && delta.dy.abs() > delta.dx.abs() * 1.5) {
+        setState(() => _dragging = true);
+      } else {
+        return;
+      }
+    }
+    setState(() => _dragDy = delta.dy.clamp(0, 500));
+  }
+
+  void _onPointerUp(PointerUpEvent e) {
+    _activePointers.remove(e.pointer);
+    if (!_dragging) return;
+    if (_dragDy > 120) {
+      Navigator.pop(context);
+    } else {
+      setState(() { _dragDy = 0; _dragging = false; });
+    }
+  }
+
+  void _onPointerCancel(PointerCancelEvent e) {
+    _activePointers.remove(e.pointer);
+    if (_dragging) setState(() { _dragDy = 0; _dragging = false; });
   }
 
   Future<void> _share(InspectionPhoto photo) async {
@@ -867,23 +931,43 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
   @override
   Widget build(BuildContext context) {
     final photo = widget.photos[_current];
+    final dragProgress = (_dragDy / 400).clamp(0.0, 1.0);
+    final dragScale = 1 - dragProgress * 0.25;
+    final bgOpacity = 1 - dragProgress * 0.6;
+    final overlayFade = (1 - _dragDy / 80).clamp(0.0, 1.0);
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _onPointerDown,
+        onPointerMove: _onPointerMove,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
+        child: Stack(
         fit: StackFit.expand,
         children: [
+          Container(color: Colors.black.withOpacity(bgOpacity)),
           // Swipeable photo pages with pinch-to-zoom
-          PageView.builder(
-            controller: _ctrl,
-            onPageChanged: (i) => setState(() => _current = i),
-            itemCount: widget.photos.length,
-            itemBuilder: (_, i) => GestureDetector(
-              onTap: () => setState(() => _showUI = !_showUI),
-              child: InteractiveViewer(
-                minScale: 1.0,
-                maxScale: 5.0,
-                child: SizedBox.expand(
-                  child: appImage(widget.photos[i].imagePath, fit: BoxFit.cover),
+          AnimatedContainer(
+            duration: _dragging ? Duration.zero : const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            transformAlignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..translate(0.0, _dragDy)
+              ..scale(dragScale),
+            child: PageView.builder(
+              controller: _ctrl,
+              onPageChanged: (i) => setState(() => _current = i),
+              itemCount: widget.photos.length,
+              itemBuilder: (_, i) => GestureDetector(
+                onTap: () => setState(() => _showUI = !_showUI),
+                child: InteractiveViewer(
+                  transformationController: _transformCtrlFor(i),
+                  minScale: 1.0,
+                  maxScale: 5.0,
+                  child: SizedBox.expand(
+                    child: appImage(widget.photos[i].imagePath, fit: BoxFit.cover),
+                  ),
                 ),
               ),
             ),
@@ -893,7 +977,7 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
           Positioned(
             top: 0, left: 0, right: 0,
             child: AnimatedOpacity(
-              opacity: _showUI ? 1.0 : 0.0,
+              opacity: _showUI ? overlayFade : 0.0,
               duration: const Duration(milliseconds: 200),
               child: IgnorePointer(
                 ignoring: !_showUI,
@@ -990,7 +1074,7 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
               child: IgnorePointer(
                 ignoring: !_showUI,
                 child: AnimatedOpacity(
-                  opacity: _showUI ? 1.0 : 0.0,
+                  opacity: _showUI ? overlayFade : 0.0,
                   duration: const Duration(milliseconds: 200),
                   child: Container(
                     decoration: BoxDecoration(
@@ -1021,6 +1105,7 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
               ),
             ), // Positioned
         ],
+        ),
       ),
     );
   }
