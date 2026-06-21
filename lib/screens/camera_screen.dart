@@ -30,7 +30,7 @@ class _CameraScreenState extends State<CameraScreen>
   CameraController? _ctrl;
   bool _cameraReady = false;
   bool _isCapturing = false;
-  bool _flashOn = false;
+  FlashMode _flashMode = FlashMode.off;
   bool _burstMode = true; // true = save instantly, false = open review screen
   int _cameraIndex = 0;
   int _catIndex = 0;
@@ -75,7 +75,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startController(int index) async {
     await _ctrl?.dispose();
-    _ctrl = CameraController(_cameras[index], ResolutionPreset.veryHigh,
+    _ctrl = CameraController(_cameras[index], ResolutionPreset.max,
         enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
     await _ctrl!.initialize();
     _minZoom = await _ctrl!.getMinZoomLevel();
@@ -93,10 +93,13 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _toggleFlash() async {
     if (!_cameraReady || _ctrl == null) return;
-    _flashOn = !_flashOn;
-    await _ctrl!.setFlashMode(
-        _flashOn ? FlashMode.torch : FlashMode.off);
-    setState(() {});
+    final next = _flashMode == FlashMode.off
+        ? FlashMode.auto
+        : _flashMode == FlashMode.auto
+            ? FlashMode.always
+            : FlashMode.off;
+    await _ctrl!.setFlashMode(next);
+    setState(() => _flashMode = next);
   }
 
   @override
@@ -280,6 +283,85 @@ class _CameraScreenState extends State<CameraScreen>
     if (dCtx.mounted) Navigator.pop(dCtx);
   }
 
+  // ── Category notes ────────────────────────────────────────────────────────
+  Future<void> _editCategoryNote(BuildContext context, String category) async {
+    final provider = context.read<AppProvider>();
+    final insp = provider.selectedInspection;
+    final site = provider.selectedSite;
+    if (insp == null || site == null) return;
+
+    final currentNote = insp.categoryNotes[category] ?? '';
+    final ctrl = TextEditingController(text: currentNote);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (bCtx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.of(bCtx).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('NOTES — $category',
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.outline,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              maxLines: 5,
+              minLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: AppColors.onSurface, fontSize: 14, height: 1.5),
+              cursorColor: AppColors.primary,
+              decoration: const InputDecoration(
+                hintText: 'Notes about this area…',
+                hintStyle: TextStyle(color: AppColors.outline, fontSize: 13),
+                enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.outlineVariant)),
+                focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.primary, width: 2)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(bCtx),
+                  child: const Text('CANCEL',
+                      style: TextStyle(color: AppColors.outline, fontSize: 12)),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(bCtx);
+                    if (!context.mounted) return;
+                    await context.read<AppProvider>().updateCategoryNote(
+                        site.id, insp.id, category, ctrl.text.trim());
+                  },
+                  child: const Text('SAVE',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    ctrl.dispose();
+  }
+
   // ── Site + Inspection selector sheet ──────────────────────────────────────
   void _showSiteSelector(BuildContext context) {
     showModalBottomSheet(
@@ -420,12 +502,16 @@ class _CameraScreenState extends State<CameraScreen>
                             padding: const EdgeInsets.all(9),
                             borderRadius: BorderRadius.circular(99),
                             child: Icon(
-                              _flashOn ? Icons.bolt : Icons.bolt_outlined,
-                              color: _flashOn
-                                  ? AppColors.primaryContainer
-                                  : _cameraReady
+                              _flashMode == FlashMode.off
+                                  ? Icons.flash_off
+                                  : _flashMode == FlashMode.auto
+                                      ? Icons.flash_auto
+                                      : Icons.flash_on,
+                              color: _flashMode == FlashMode.off
+                                  ? (_cameraReady ? AppColors.outline : AppColors.outline)
+                                  : _flashMode == FlashMode.auto
                                       ? AppColors.primary
-                                      : AppColors.outline,
+                                      : const Color(0xFFFFD600),
                               size: 18,
                             ),
                           ),
@@ -562,8 +648,10 @@ class _CameraScreenState extends State<CameraScreen>
             child: _CategoryStrip(
               categories: cats,
               selectedIndex: _catIndex.clamp(0, cats.length - 1),
+              categoryNotes: insp?.categoryNotes ?? {},
               onSelect: (i) => setState(() => _catIndex = i),
               onAddLocation: () => _addLocationTag(context),
+              onLongPress: (cat) => _editCategoryNote(context, cat),
             ),
           ),
           // Shutter row
@@ -919,39 +1007,62 @@ class _GridPainter extends CustomPainter {
 class _CategoryStrip extends StatelessWidget {
   final List<String> categories;
   final int selectedIndex;
+  final Map<String, String> categoryNotes;
   final ValueChanged<int> onSelect;
   final VoidCallback onAddLocation;
+  final ValueChanged<String> onLongPress;
   const _CategoryStrip(
       {required this.categories,
       required this.selectedIndex,
+      required this.categoryNotes,
       required this.onSelect,
-      required this.onAddLocation});
+      required this.onAddLocation,
+      required this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 36,
+      height: 42,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
           ...List.generate(categories.length, (i) {
             final active = i == selectedIndex;
+            final cat = categories[i];
+            final isAll = cat == 'ALL';
+            final hasNote = !isAll && categoryNotes.containsKey(cat);
             return GestureDetector(
               onTap: () => onSelect(i),
+              onLongPress: isAll ? null : () => onLongPress(cat),
               child: Container(
                 margin: const EdgeInsets.only(right: 16),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(categories[i],
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: active
-                                ? AppColors.primary
-                                : AppColors.onSurface.withOpacity(0.4),
-                            letterSpacing: 0.4)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(cat,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: active
+                                    ? AppColors.primary
+                                    : AppColors.onSurface.withOpacity(0.4),
+                                letterSpacing: 0.4)),
+                        if (hasNote) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 5, height: 5,
+                            decoration: BoxDecoration(
+                              color: active ? AppColors.primary : AppColors.outline,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 3),
                     if (active)
                       Container(

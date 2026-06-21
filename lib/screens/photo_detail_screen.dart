@@ -214,6 +214,7 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
 
     final selected = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.surfaceContainerHigh,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -1139,6 +1140,7 @@ class _CategoryPickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxListHeight = MediaQuery.of(context).size.height * 0.55;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1153,24 +1155,33 @@ class _CategoryPickerSheet extends StatelessWidget {
                     color: AppColors.outline,
                     letterSpacing: 0.5)),
           ),
-          ...categories.map((cat) {
-            final active = cat == current;
-            final isDamage = cat == 'DAMAGE';
-            final activeColor =
-                isDamage ? AppColors.onTertiaryContainer : AppColors.primary;
-            return ListTile(
-              onTap: () => Navigator.pop(context, cat),
-              leading: Icon(_iconForCategory(cat),
-                  color: active ? activeColor : AppColors.outline),
-              title: Text(cat,
-                  style: TextStyle(
-                      color: active ? activeColor : AppColors.onSurface,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
-              trailing:
-                  active ? Icon(Icons.check, color: activeColor) : null,
-            );
-          }),
-          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxListHeight),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                ...categories.map((cat) {
+                  final active = cat == current;
+                  final isDamage = cat == 'DAMAGE';
+                  final activeColor =
+                      isDamage ? AppColors.onTertiaryContainer : AppColors.primary;
+                  return ListTile(
+                    onTap: () => Navigator.pop(context, cat),
+                    leading: Icon(_iconForCategory(cat),
+                        color: active ? activeColor : AppColors.outline),
+                    title: Text(cat,
+                        style: TextStyle(
+                            color: active ? activeColor : AppColors.onSurface,
+                            fontWeight:
+                                active ? FontWeight.w700 : FontWeight.w500)),
+                    trailing:
+                        active ? Icon(Icons.check, color: activeColor) : null,
+                  );
+                }),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
         ],
       ),
     );

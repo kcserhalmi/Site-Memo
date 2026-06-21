@@ -11,6 +11,7 @@ class Inspection {
   final DateTime createdAt;
   List<InspectionPhoto> photos;
   List<String> categories;
+  Map<String, String> categoryNotes;
 
   Inspection({
     required this.id,
@@ -23,8 +24,10 @@ class Inspection {
     this.status = 'in_progress',
     List<InspectionPhoto>? photos,
     List<String>? categories,
+    Map<String, String>? categoryNotes,
   })  : photos = photos ?? [],
-        categories = categories ?? [];
+        categories = categories ?? [],
+        categoryNotes = categoryNotes ?? {};
 
   int get photoCount => photos.length;
   int get flaggedCount => photos.where((p) => p.isFlagged).length;
@@ -48,6 +51,7 @@ class Inspection {
         'status': status,
         'photos': photos.map((p) => p.toJson()).toList(),
         'categories': categories,
+        'categoryNotes': categoryNotes,
       };
 
   factory Inspection.fromJson(Map<String, dynamic> json) => Inspection(
@@ -66,5 +70,7 @@ class Inspection {
             [],
         categories:
             (json['categories'] as List<dynamic>?)?.cast<String>() ?? [],
+        categoryNotes:
+            (json['categoryNotes'] as Map<String, dynamic>?)?.cast<String, String>() ?? {},
       );
 }

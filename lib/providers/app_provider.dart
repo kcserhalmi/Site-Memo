@@ -209,6 +209,22 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateCategoryNote(
+      String jobId, String inspectionId, String category, String note) async {
+    final ji = _jobs.indexWhere((j) => j.id == jobId);
+    if (ji == -1) return;
+    final ii =
+        _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
+    if (ii == -1) return;
+    if (note.isEmpty) {
+      _jobs[ji].inspections[ii].categoryNotes.remove(category);
+    } else {
+      _jobs[ji].inspections[ii].categoryNotes[category] = note;
+    }
+    await _persist();
+    notifyListeners();
+  }
+
   // ── Inspection CRUD ────────────────────────────────────────────────────────
 
   Future<Inspection> createInspection({
