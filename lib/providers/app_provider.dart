@@ -1,6 +1,5 @@
-import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/job.dart';
 import '../models/inspection.dart';
@@ -39,9 +38,11 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Persistence ────────────────────────────────────────────────────────────
+  // ── Persistence (Firestore — one document per Job under users/{uid}/jobs) ──
 
-  String get _storageKey => 'jobs_v3_${_uid ?? 'local'}';
+  CollectionReference<Map<String, dynamic>>? get _jobsCollection => _uid == null
+      ? null
+      : FirebaseFirestore.instance.collection('users').doc(_uid).collection('jobs');
 
   /// Called by AuthGate whenever the signed-in user changes (sign in, sign
   /// out, or switching accounts on the same device). Reloads that user's
@@ -60,21 +61,41 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> loadData() async {
+    final collection = _jobsCollection;
+    if (collection == null) return;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_storageKey);
-      if (raw != null) {
-        final list = jsonDecode(raw) as List<dynamic>;
-        _jobs = list.map((e) => Job.fromJson(e as Map<String, dynamic>)).toList();
+      final snapshot = await collection.get();
+      if (snapshot.docs.isEmpty) {
+        // Confirmed empty (not a network failure) — seed sample data so a
+        // brand-new signup isn't staring at a blank app.
+        await _seedSampleData();
       } else {
-        _seedSampleData();
+        _jobs = snapshot.docs.map((d) => Job.fromJson(d.data())).toList();
       }
     } catch (_) {
-      _seedSampleData();
+      // Fetch failed (e.g. offline with no local cache yet) — leave _jobs as
+      // whatever it already was. Do NOT fall back to fake sample data here;
+      // that would risk clobbering a real user's view of their own data.
     }
     // Auto-select first active site + its latest inspection
     _autoSelect();
     notifyListeners();
+  }
+
+  Future<void> _persistJob(Job job) async {
+    final collection = _jobsCollection;
+    if (collection == null) return;
+    try {
+      await collection.doc(job.id).set(job.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> _deleteJobRemote(String jobId) async {
+    final collection = _jobsCollection;
+    if (collection == null) return;
+    try {
+      await collection.doc(jobId).delete();
+    } catch (_) {}
   }
 
   void _autoSelect() {
@@ -89,17 +110,9 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _persist() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          _storageKey, jsonEncode(_jobs.map((j) => j.toJson()).toList()));
-    } catch (_) {}
-  }
-
   // ── Sample data ────────────────────────────────────────────────────────────
 
-  void _seedSampleData() {
+  Future<void> _seedSampleData() async {
     final now = DateTime.now();
     final job1Id = _uuid.v4();
     final job2Id = _uuid.v4();
@@ -159,6 +172,9 @@ class AppProvider extends ChangeNotifier {
     ];
     _selectedSiteId = job1Id;
     _selectedInspectionId = insp2.id;
+    for (final job in _jobs) {
+      await _persistJob(job);
+    }
   }
 
   // ── Site (Job) CRUD ────────────────────────────────────────────────────────
@@ -175,7 +191,7 @@ class AppProvider extends ChangeNotifier {
     _jobs.insert(0, job);
     _selectedSiteId = job.id;
     _selectedInspectionId = null;
-    await _persist();
+    await _persistJob(job);
     notifyListeners();
     return job;
   }
@@ -186,7 +202,7 @@ class AppProvider extends ChangeNotifier {
     _jobs[i].name = name;
     _jobs[i].location = location;
     _jobs[i].updatedAt = DateTime.now();
-    await _persist();
+    await _persistJob(_jobs[i]);
     notifyListeners();
   }
 
@@ -197,7 +213,7 @@ class AppProvider extends ChangeNotifier {
       _selectedInspectionId = null;
       _autoSelect();
     }
-    await _persist();
+    await _deleteJobRemote(jobId);
     notifyListeners();
   }
 
@@ -211,7 +227,7 @@ class AppProvider extends ChangeNotifier {
       _selectedInspectionId = null;
       _autoSelect();
     }
-    await _persist();
+    await _persistJob(_jobs[i]);
     notifyListeners();
   }
 
@@ -224,7 +240,7 @@ class AppProvider extends ChangeNotifier {
     if (ii == -1) return;
     _jobs[ji].inspections[ii].categories = List.from(categories);
     _jobs[ji].updatedAt = DateTime.now();
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -240,7 +256,7 @@ class AppProvider extends ChangeNotifier {
     } else {
       _jobs[ji].inspections[ii].categoryNotes[category] = note;
     }
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -268,7 +284,7 @@ class AppProvider extends ChangeNotifier {
     _jobs[i].updatedAt = DateTime.now();
     _selectedSiteId = jobId;
     _selectedInspectionId = insp.id;
-    await _persist();
+    await _persistJob(_jobs[i]);
     notifyListeners();
     return insp;
   }
@@ -281,7 +297,7 @@ class AppProvider extends ChangeNotifier {
         _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
     if (ii == -1) return;
     _jobs[ji].inspections[ii].status = status;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -297,7 +313,7 @@ class AppProvider extends ChangeNotifier {
     _jobs[ji].inspections[ii].inspector = inspector;
     _jobs[ji].inspections[ii].date = date;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -311,7 +327,7 @@ class AppProvider extends ChangeNotifier {
           ? _jobs[i].inspections.first.id
           : null;
     }
-    await _persist();
+    await _persistJob(_jobs[i]);
     notifyListeners();
   }
 
@@ -326,7 +342,7 @@ class AppProvider extends ChangeNotifier {
     if (ii == -1) return;
     _jobs[ji].inspections[ii].photos.add(photo);
     _jobs[ji].updatedAt = DateTime.now();
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -342,7 +358,7 @@ class AppProvider extends ChangeNotifier {
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].isFlagged =
         !_jobs[ji].inspections[ii].photos[pi].isFlagged;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -354,7 +370,7 @@ class AppProvider extends ChangeNotifier {
         _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
     if (ii == -1) return;
     _jobs[ji].inspections[ii].notes = notes;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -369,7 +385,7 @@ class AppProvider extends ChangeNotifier {
         .indexWhere((p) => p.id == photoId);
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].caption = caption;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -384,7 +400,7 @@ class AppProvider extends ChangeNotifier {
         .indexWhere((p) => p.id == photoId);
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].category = category;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -400,7 +416,7 @@ class AppProvider extends ChangeNotifier {
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].voiceNotePath = voiceNotePath;
     _jobs[ji].inspections[ii].photos[pi].transcription = transcription;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -413,7 +429,7 @@ class AppProvider extends ChangeNotifier {
     if (ii == -1) return;
     _jobs[ji].inspections[ii].photos.removeWhere((p) => p.id == photoId);
     _jobs[ji].updatedAt = DateTime.now();
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -429,7 +445,7 @@ class AppProvider extends ChangeNotifier {
         .indexWhere((p) => p.id == photoId);
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].imagePath = newImagePath;
-    await _persist();
+    await _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
