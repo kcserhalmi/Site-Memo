@@ -10,6 +10,7 @@ class AppProvider extends ChangeNotifier {
   List<Job> _jobs = [];
   String? _selectedSiteId;
   String? _selectedInspectionId;
+  String? _uid;
   final _uuid = const Uuid();
 
   List<Job> get jobs => _jobs;
@@ -40,10 +41,28 @@ class AppProvider extends ChangeNotifier {
 
   // ── Persistence ────────────────────────────────────────────────────────────
 
+  String get _storageKey => 'jobs_v3_${_uid ?? 'local'}';
+
+  /// Called by AuthGate whenever the signed-in user changes (sign in, sign
+  /// out, or switching accounts on the same device). Reloads that user's
+  /// own data so one device never shows a different account's jobs/photos.
+  Future<void> setCurrentUser(String? uid) async {
+    if (uid == _uid) return;
+    _uid = uid;
+    if (uid == null) {
+      _jobs = [];
+      _selectedSiteId = null;
+      _selectedInspectionId = null;
+      notifyListeners();
+      return;
+    }
+    await loadData();
+  }
+
   Future<void> loadData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('jobs_v3');
+      final raw = prefs.getString(_storageKey);
       if (raw != null) {
         final list = jsonDecode(raw) as List<dynamic>;
         _jobs = list.map((e) => Job.fromJson(e as Map<String, dynamic>)).toList();
@@ -74,7 +93,7 @@ class AppProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          'jobs_v3', jsonEncode(_jobs.map((j) => j.toJson()).toList()));
+          _storageKey, jsonEncode(_jobs.map((j) => j.toJson()).toList()));
     } catch (_) {}
   }
 

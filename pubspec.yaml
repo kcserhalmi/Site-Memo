@@ -22,6 +22,11 @@ dependencies:
   share_plus: ^10.0.0
   pdf: ^3.11.0
   archive: ^3.6.0
+  firebase_core: ^4.11.0
+  firebase_auth: ^6.5.3
+  cloud_firestore: ^6.6.0
+  sign_in_with_apple: ^8.1.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

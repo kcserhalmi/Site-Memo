@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_prefs.dart';
 import '../widgets/glass_card.dart';
@@ -12,6 +14,7 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   final _nameCtrl = TextEditingController();
+  final _authService = AuthService();
   bool _autoTranscribe = true;
   bool _highQuality = false;
   bool _loaded = false;
@@ -44,6 +47,72 @@ class _AccountScreenState extends State<AccountScreen> {
   void dispose() {
     _nameCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sign out?',
+            style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w700)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dCtx, false),
+              child: const Text('CANCEL',
+                  style: TextStyle(color: AppColors.outline, fontSize: 12))),
+          TextButton(
+              onPressed: () => Navigator.pop(dCtx, true),
+              child: const Text('SIGN OUT',
+                  style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _authService.signOut();
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete account?',
+            style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w700)),
+        content: const Text(
+            'This permanently deletes your account. This cannot be undone.',
+            style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dCtx, false),
+              child: const Text('CANCEL',
+                  style: TextStyle(color: AppColors.outline, fontSize: 12))),
+          TextButton(
+              onPressed: () => Navigator.pop(dCtx, true),
+              child: const Text('DELETE',
+                  style: TextStyle(
+                      color: AppColors.error,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _authService.deleteAccount();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_authService.authErrorMessage(e))),
+        );
+      }
+    }
   }
 
   @override
@@ -190,6 +259,42 @@ class _AccountScreenState extends State<AccountScreen> {
                   Text('1.0.0',
                       style:
                           TextStyle(fontSize: 13, color: AppColors.outline)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Account ─────────────────────────────────────────────────
+            const _SectionLabel('ACCOUNT'),
+            const SizedBox(height: 8),
+            if (FirebaseAuth.instance.currentUser?.email != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 6),
+                child: Text(FirebaseAuth.instance.currentUser!.email!,
+                    style: const TextStyle(fontSize: 12, color: AppColors.outline)),
+              ),
+            GlassCard(
+              onTap: _signOut,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: const Row(
+                children: [
+                  Icon(Icons.logout, color: AppColors.outline, size: 20),
+                  SizedBox(width: 14),
+                  Text('Sign Out',
+                      style: TextStyle(fontSize: 14, color: AppColors.onSurface)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            GlassCard(
+              onTap: _deleteAccount,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: const Row(
+                children: [
+                  Icon(Icons.delete_forever_outlined, color: AppColors.error, size: 20),
+                  SizedBox(width: 14),
+                  Text('Delete Account',
+                      style: TextStyle(fontSize: 14, color: AppColors.error)),
                 ],
               ),
             ),

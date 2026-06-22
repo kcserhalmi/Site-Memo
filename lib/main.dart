@@ -1,9 +1,11 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'firebase_options.dart';
 import 'providers/app_provider.dart';
-import 'screens/main_shell.dart';
+import 'screens/auth/auth_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,13 +24,19 @@ void main() async {
     statusBarIconBrightness: Brightness.light,
   ));
 
+  String? firebaseError;
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    firebaseError = e.toString();
+  }
+
   final provider = AppProvider();
-  await provider.loadData();
 
   runApp(
     ChangeNotifierProvider.value(
       value: provider,
-      child: const SiteMemoApp(),
+      child: SiteMemoApp(firebaseError: firebaseError),
     ),
   );
 }
@@ -41,7 +49,8 @@ bool get _isDesktop {
 }
 
 class SiteMemoApp extends StatelessWidget {
-  const SiteMemoApp({super.key});
+  final String? firebaseError;
+  const SiteMemoApp({super.key, this.firebaseError});
 
   @override
   Widget build(BuildContext context) {
@@ -88,8 +97,8 @@ class SiteMemoApp extends StatelessWidget {
         ),
       ),
       home: _isDesktop
-          ? const _PhoneFrame(child: MainShell())
-          : const MainShell(),
+          ? _PhoneFrame(child: AuthGate(firebaseError: firebaseError))
+          : AuthGate(firebaseError: firebaseError),
     );
   }
 }
