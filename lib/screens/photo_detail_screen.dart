@@ -85,12 +85,18 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
           TextButton(
             onPressed: () async {
               final p = _photo;
-              await context
-                  .read<AppProvider>()
-                  .deletePhoto(p.jobId, p.inspectionId, p.id);
+              final provider = context.read<AppProvider>();
+              final messenger = ScaffoldMessenger.of(context);
+              await provider.deletePhoto(p.jobId, p.inspectionId, p.id);
               if (dCtx.mounted) Navigator.pop(dCtx);
               // Always pop back — let parent screen handle the updated list
               if (context.mounted) Navigator.pop(context);
+              messenger.showSnackBar(SnackBar(
+                content: const Text('Photo deleted'),
+                duration: const Duration(seconds: 5),
+                action: SnackBarAction(
+                    label: 'UNDO', onPressed: provider.undoDeletePhotos),
+              ));
             },
             child: const Text('DELETE',
                 style: TextStyle(
@@ -389,6 +395,8 @@ class _PhotoPageState extends State<_PhotoPage> {
   bool _isListening = false;
   final _notesCtrl = TextEditingController();
   bool _editingNotes = false; // true when inline notes editor is open
+  // Text present before dictation started — new words append, never replace
+  String _dictationBase = '';
 
   @override
   void initState() {
@@ -407,10 +415,13 @@ class _PhotoPageState extends State<_PhotoPage> {
       setState(() => _isListening = false);
     } else if (_speechAvail) {
       try {
+        _dictationBase = _notesCtrl.text.trim();
         await _speech.listen(
           onResult: (r) {
             if (mounted && r.recognizedWords.isNotEmpty) {
-              setState(() => _notesCtrl.text = r.recognizedWords);
+              setState(() => _notesCtrl.text = _dictationBase.isEmpty
+                  ? r.recognizedWords
+                  : '$_dictationBase ${r.recognizedWords}');
             }
           },
           listenOptions: SpeechListenOptions(cancelOnError: false, partialResults: true),

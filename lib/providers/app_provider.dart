@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -54,6 +56,7 @@ class AppProvider extends ChangeNotifier {
   /// own data so one device never shows a different account's jobs/photos.
   Future<void> setCurrentUser(String? uid) async {
     if (uid == _uid) return;
+    _finalizePendingDelete();
     _uid = uid;
     if (uid == null) {
       _jobs = [];
@@ -91,6 +94,8 @@ class AppProvider extends ChangeNotifier {
         await _seedSampleData();
       } else {
         _jobs = snapshot.docs.map((d) => Job.fromJson(d.data())).toList();
+        // Firestore returns docs in ID order — show most recent work first
+        _jobs.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       }
     } catch (_) {
       // Fetch failed (e.g. offline with no local cache yet) — leave _jobs as
@@ -104,20 +109,48 @@ class AppProvider extends ChangeNotifier {
     syncPendingUploads();
   }
 
+  // ── Sync state (surfaced in the dashboard header) ──────────────────────────
+  // Firestore's write future only resolves once the SERVER acknowledges it,
+  // so persistence must never be awaited on the UI path — offline it would
+  // hang forever. Writes are fire-and-forget; Firestore queues them locally
+  // and delivers when connectivity returns. These counters make that state
+  // visible instead of silent.
+
+  int _pendingWrites = 0;
+  bool _syncError = false;
+  bool get isSyncing => _pendingWrites > 0;
+  bool get hasSyncError => _syncError;
+
   Future<void> _persistJob(Job job) async {
     final collection = _jobsCollection;
     if (collection == null) return;
+    _pendingWrites++;
+    notifyListeners();
     try {
       await collection.doc(job.id).set(job.toJson());
-    } catch (_) {}
+      _syncError = false;
+    } catch (_) {
+      _syncError = true;
+    } finally {
+      _pendingWrites--;
+      notifyListeners();
+    }
   }
 
   Future<void> _deleteJobRemote(String jobId) async {
     final collection = _jobsCollection;
     if (collection == null) return;
+    _pendingWrites++;
+    notifyListeners();
     try {
       await collection.doc(jobId).delete();
-    } catch (_) {}
+      _syncError = false;
+    } catch (_) {
+      _syncError = true;
+    } finally {
+      _pendingWrites--;
+      notifyListeners();
+    }
   }
 
   void _autoSelect() {
@@ -213,7 +246,7 @@ class AppProvider extends ChangeNotifier {
     _jobs.insert(0, job);
     _selectedSiteId = job.id;
     _selectedInspectionId = null;
-    await _persistJob(job);
+    _persistJob(job);
     notifyListeners();
     return job;
   }
@@ -224,7 +257,7 @@ class AppProvider extends ChangeNotifier {
     _jobs[i].name = name;
     _jobs[i].location = location;
     _jobs[i].updatedAt = DateTime.now();
-    await _persistJob(_jobs[i]);
+    _persistJob(_jobs[i]);
     notifyListeners();
   }
 
@@ -243,7 +276,7 @@ class AppProvider extends ChangeNotifier {
       _selectedInspectionId = null;
       _autoSelect();
     }
-    await _deleteJobRemote(jobId);
+    _deleteJobRemote(jobId);
     notifyListeners();
   }
 
@@ -257,7 +290,7 @@ class AppProvider extends ChangeNotifier {
       _selectedInspectionId = null;
       _autoSelect();
     }
-    await _persistJob(_jobs[i]);
+    _persistJob(_jobs[i]);
     notifyListeners();
   }
 
@@ -270,7 +303,7 @@ class AppProvider extends ChangeNotifier {
     if (ii == -1) return;
     _jobs[ji].inspections[ii].categories = List.from(categories);
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -286,7 +319,7 @@ class AppProvider extends ChangeNotifier {
     } else {
       _jobs[ji].inspections[ii].categoryNotes[category] = note;
     }
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -314,7 +347,7 @@ class AppProvider extends ChangeNotifier {
     _jobs[i].updatedAt = DateTime.now();
     _selectedSiteId = jobId;
     _selectedInspectionId = insp.id;
-    await _persistJob(_jobs[i]);
+    _persistJob(_jobs[i]);
     notifyListeners();
     return insp;
   }
@@ -327,7 +360,7 @@ class AppProvider extends ChangeNotifier {
         _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
     if (ii == -1) return;
     _jobs[ji].inspections[ii].status = status;
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -343,7 +376,7 @@ class AppProvider extends ChangeNotifier {
     _jobs[ji].inspections[ii].inspector = inspector;
     _jobs[ji].inspections[ii].date = date;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -364,7 +397,7 @@ class AppProvider extends ChangeNotifier {
           ? _jobs[i].inspections.first.id
           : null;
     }
-    await _persistJob(_jobs[i]);
+    _persistJob(_jobs[i]);
     notifyListeners();
   }
 
@@ -379,7 +412,7 @@ class AppProvider extends ChangeNotifier {
     if (ii == -1) return;
     _jobs[ji].inspections[ii].photos.add(photo);
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
     // Back up to cloud in the background — non-blocking so capture stays fast
     _uploadPhotoIfNeeded(_jobs[ji], photo);
@@ -443,7 +476,7 @@ class AppProvider extends ChangeNotifier {
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].isFlagged =
         !_jobs[ji].inspections[ii].photos[pi].isFlagged;
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -456,7 +489,7 @@ class AppProvider extends ChangeNotifier {
     if (ii == -1) return;
     _jobs[ji].inspections[ii].notes = notes;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -472,7 +505,7 @@ class AppProvider extends ChangeNotifier {
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].caption = caption;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -488,7 +521,7 @@ class AppProvider extends ChangeNotifier {
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].category = category;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
@@ -505,24 +538,74 @@ class AppProvider extends ChangeNotifier {
     _jobs[ji].inspections[ii].photos[pi].voiceNotePath = voiceNotePath;
     _jobs[ji].inspections[ii].photos[pi].transcription = transcription;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
   }
 
+  // ── Photo deletion with a short undo window ────────────────────────────────
+  // Photos disappear from the UI immediately, but the local file and cloud
+  // copy are only destroyed after the undo window closes. Field photos are
+  // evidence — a mis-tap must be recoverable.
+
+  _PendingPhotoDelete? _pendingDelete;
+  bool get canUndoDelete => _pendingDelete != null;
+
   Future<void> deletePhoto(
-      String jobId, String inspectionId, String photoId) async {
+      String jobId, String inspectionId, String photoId) =>
+      deletePhotos(jobId, inspectionId, [photoId]);
+
+  Future<void> deletePhotos(
+      String jobId, String inspectionId, List<String> photoIds) async {
     final ji = _jobs.indexWhere((j) => j.id == jobId);
     if (ji == -1) return;
     final ii =
         _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
     if (ii == -1) return;
-    for (final p in _jobs[ji].inspections[ii].photos) {
-      if (p.id == photoId) _cleanupPhotoFiles(p);
+    // Only one undo window at a time — destroy the previous batch for real
+    _finalizePendingDelete();
+    final photos = _jobs[ji].inspections[ii].photos;
+    final removed = <(int, InspectionPhoto)>[];
+    for (int i = 0; i < photos.length; i++) {
+      if (photoIds.contains(photos[i].id)) removed.add((i, photos[i]));
     }
-    _jobs[ji].inspections[ii].photos.removeWhere((p) => p.id == photoId);
+    if (removed.isEmpty) return;
+    photos.removeWhere((p) => photoIds.contains(p.id));
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _pendingDelete = _PendingPhotoDelete(jobId, inspectionId, removed)
+      ..timer = Timer(const Duration(seconds: 6), _finalizePendingDelete);
+    _persistJob(_jobs[ji]);
     notifyListeners();
+  }
+
+  /// Restores the last deleted batch at its original positions.
+  void undoDeletePhotos() {
+    final pending = _pendingDelete;
+    if (pending == null) return;
+    pending.timer?.cancel();
+    _pendingDelete = null;
+    final ji = _jobs.indexWhere((j) => j.id == pending.jobId);
+    if (ji == -1) return;
+    final ii = _jobs[ji]
+        .inspections
+        .indexWhere((i) => i.id == pending.inspectionId);
+    if (ii == -1) return;
+    final photos = _jobs[ji].inspections[ii].photos;
+    for (final (index, photo) in pending.removed) {
+      photos.insert(index.clamp(0, photos.length), photo);
+    }
+    _jobs[ji].updatedAt = DateTime.now();
+    _persistJob(_jobs[ji]);
+    notifyListeners();
+  }
+
+  void _finalizePendingDelete() {
+    final pending = _pendingDelete;
+    if (pending == null) return;
+    pending.timer?.cancel();
+    _pendingDelete = null;
+    for (final (_, photo) in pending.removed) {
+      _cleanupPhotoFiles(photo);
+    }
   }
 
   Future<void> updatePhotoImage(
@@ -545,7 +628,7 @@ class AppProvider extends ChangeNotifier {
     photo.imagePath = newImagePath;
     photo.storageUrl = null;
     _jobs[ji].updatedAt = DateTime.now();
-    await _persistJob(_jobs[ji]);
+    _persistJob(_jobs[ji]);
     notifyListeners();
     // Remove the stale remote copy first so the re-upload can't be
     // clobbered by the delete, then upload the annotated image.
@@ -566,4 +649,12 @@ class AppProvider extends ChangeNotifier {
           s2 + i.photos.where((p) => p.isFlagged).length));
 
   int get totalPhotoCount => _jobs.fold(0, (sum, j) => sum + j.photoCount);
+}
+
+class _PendingPhotoDelete {
+  final String jobId;
+  final String inspectionId;
+  final List<(int, InspectionPhoto)> removed; // original index + photo
+  Timer? timer;
+  _PendingPhotoDelete(this.jobId, this.inspectionId, this.removed);
 }

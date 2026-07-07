@@ -280,7 +280,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         style: TextStyle(
                             fontSize: 14, color: AppColors.onSurface)),
                   ]),
-                  Text('1.0.0',
+                  Text('1.1.0',
                       style:
                           TextStyle(fontSize: 13, color: AppColors.outline)),
                 ],

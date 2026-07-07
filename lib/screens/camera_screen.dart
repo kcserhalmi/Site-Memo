@@ -19,7 +19,12 @@ class CameraScreen extends StatefulWidget {
   /// When pushed from InspectionDetailScreen, these are pre-set.
   final String? jobId;
   final String? inspectionId;
-  const CameraScreen({super.key, this.jobId, this.inspectionId});
+
+  /// False when this screen sits on a hidden tab — the camera session is
+  /// released so it doesn't drain battery behind other tabs.
+  final bool active;
+  const CameraScreen(
+      {super.key, this.jobId, this.inspectionId, this.active = true});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -60,7 +65,7 @@ class _CameraScreenState extends State<CameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (!_isDesktop) _initCamera();
+    if (!_isDesktop && widget.active) _initCamera();
     // Override provider selection if pushed with specific IDs
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.jobId != null && widget.inspectionId != null) {
@@ -109,6 +114,21 @@ class _CameraScreenState extends State<CameraScreen>
             : FlashMode.off;
     await _ctrl!.setFlashMode(next);
     setState(() => _flashMode = next);
+  }
+
+  @override
+  void didUpdateWidget(CameraScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.active == old.active) return;
+    if (!widget.active) {
+      // Tab hidden — release the camera
+      _ctrl?.dispose();
+      _ctrl = null;
+      _flashMode = FlashMode.off;
+      if (mounted) setState(() => _cameraReady = false);
+    } else if (!_isDesktop) {
+      _initCamera();
+    }
   }
 
   @override

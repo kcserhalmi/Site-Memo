@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../models/inspection.dart';
+import '../models/inspection_photo.dart';
 import '../models/job.dart';
 
 class ExportService {
@@ -20,12 +21,8 @@ class ExportService {
     for (int i = 0; i < insp.photos.length; i++) {
       final p = insp.photos[i];
       pw.MemoryImage? img;
-      if (!kIsWeb) {
-        try {
-          final bytes = await File(p.imagePath).readAsBytes();
-          img = pw.MemoryImage(bytes);
-        } catch (_) {}
-      }
+      final bytes = await _photoBytes(p);
+      if (bytes != null) img = pw.MemoryImage(bytes);
       photoData.add(_PhotoData(
         image: img,
         index: i + 1,
@@ -352,18 +349,12 @@ class ExportService {
     // Photos
     for (int i = 0; i < insp.photos.length; i++) {
       final p = insp.photos[i];
-      if (!kIsWeb) {
-        try {
-          final file = File(p.imagePath);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final name =
-                'photos/${(i + 1).toString().padLeft(3, '0')}_${_safe(p.category)}.jpg';
-            archive.addFile(ArchiveFile(name, bytes.length, bytes));
-          }
-        } catch (_) {}
+      final bytes = await _photoBytes(p);
+      if (bytes != null) {
+        final name =
+            'photos/${(i + 1).toString().padLeft(3, '0')}_${_safe(p.category)}.jpg';
+        archive.addFile(ArchiveFile(name, bytes.length, bytes));
       }
-      // Audio intentionally excluded — text notes are in report.txt
     }
 
     final zipBytes = ZipEncoder().encode(archive);
@@ -419,6 +410,32 @@ class ExportService {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  /// Photo bytes for export: local file first, cloud backup second — so
+  /// reports generated on a second device (or after reinstall) still
+  /// include every image.
+  static Future<Uint8List?> _photoBytes(InspectionPhoto p) async {
+    if (kIsWeb) return null;
+    try {
+      final file = File(p.imagePath);
+      if (await file.exists()) return await file.readAsBytes();
+    } catch (_) {}
+    final url = p.storageUrl;
+    if (url == null || url.isEmpty) return null;
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        return await consolidateHttpClientResponseBytes(response);
+      }
+    } catch (_) {
+    } finally {
+      client?.close();
+    }
+    return null;
+  }
 
   static Future<void> _shareFile({
     required Uint8List bytes,

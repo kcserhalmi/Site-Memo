@@ -305,19 +305,42 @@ class _Header extends StatelessWidget {
                 ),
               ],
             ),
-            PressScale(
-              onTap: onOpenAccount,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: AppColors.surfaceContainerHigh,
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Cloud sync state — done / uploading / error
+                if (!p.isDemoMode)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Icon(
+                      p.hasSyncError
+                          ? Icons.cloud_off_outlined
+                          : p.isSyncing
+                              ? Icons.cloud_upload_outlined
+                              : Icons.cloud_done_outlined,
+                      size: 17,
+                      color: p.hasSyncError
+                          ? AppColors.onTertiaryContainer
+                          : p.isSyncing
+                              ? AppColors.primaryFixedDim
+                              : AppColors.outline.withOpacity(0.55),
+                    ),
+                  ),
+                PressScale(
+                  onTap: onOpenAccount,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: AppColors.surfaceContainerHigh,
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: const Icon(Icons.person,
+                        color: AppColors.outline, size: 20),
+                  ),
                 ),
-                child: const Icon(Icons.person,
-                    color: AppColors.outline, size: 20),
-              ),
+              ],
             ),
           ],
         ),

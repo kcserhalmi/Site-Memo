@@ -48,6 +48,8 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
   bool _speechAvail = false;
   bool _isListening = false;
   bool _isSaving = false;
+  // Text present before dictation started — new words append, never replace
+  String _dictationBase = '';
 
   @override
   void initState() {
@@ -97,10 +99,13 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
         return;
       }
       try {
+        _dictationBase = _notesCtrl.text.trim();
         await _speech.listen(
           onResult: (r) {
             if (mounted && r.recognizedWords.isNotEmpty) {
-              setState(() => _notesCtrl.text = r.recognizedWords);
+              setState(() => _notesCtrl.text = _dictationBase.isEmpty
+                  ? r.recognizedWords
+                  : '$_dictationBase ${r.recognizedWords}');
             }
           },
           listenOptions: SpeechListenOptions(cancelOnError: false, partialResults: true),

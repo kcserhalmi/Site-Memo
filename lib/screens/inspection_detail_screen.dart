@@ -73,12 +73,19 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !context.mounted) return;
     final provider = context.read<AppProvider>();
-    for (final p in toDelete) {
-      await provider.deletePhoto(jobId, inspId, p.id);
-    }
+    await provider.deletePhotos(
+        jobId, inspId, toDelete.map((p) => p.id).toList());
     _clearSelection();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$count photo${count == 1 ? '' : 's'} deleted'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+            label: 'UNDO', onPressed: provider.undoDeletePhotos),
+      ));
+    }
   }
 
   List<String> _filterCats(Inspection insp) =>

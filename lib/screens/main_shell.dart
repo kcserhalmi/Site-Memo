@@ -32,7 +32,8 @@ class _MainShellState extends State<MainShell> {
     if (!_initialized[i]) return const SizedBox.shrink();
     switch (i) {
       case 0: return DashboardScreen(onOpenAccount: () => _switchTab(3));
-      case 1: return const CameraScreen();
+      // active flag releases the camera whenever another tab is shown
+      case 1: return CameraScreen(active: _index == 1);
       case 2: return const SearchScreen();
       case 3: return const AccountScreen();
       default: return const SizedBox.shrink();
