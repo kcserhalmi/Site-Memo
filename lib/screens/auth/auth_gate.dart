@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/subscription_service.dart';
 import '../../theme/app_colors.dart';
 import '../main_shell.dart';
+import '../paywall_screen.dart';
 import 'login_screen.dart';
 
 class AuthGate extends StatefulWidget {
@@ -21,6 +23,7 @@ class _AuthGateState extends State<AuthGate> {
   final _authService = AuthService();
   StreamSubscription<User?>? _sub;
   User? _user;
+  SubscriptionStatus? _subStatus;
   bool _ready = false;
   bool _demoStarted = false;
 
@@ -34,9 +37,18 @@ class _AuthGateState extends State<AuthGate> {
     _sub = _authService.authStateChanges.listen((user) async {
       if (!mounted) return;
       await context.read<AppProvider>().setCurrentUser(user?.uid);
+      // Trial/subscription check — fail-open so a network blip never
+      // locks anyone out.
+      SubscriptionStatus? status;
+      if (user != null) {
+        try {
+          status = await SubscriptionService.check();
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {
         _user = user;
+        _subStatus = status;
         _ready = true;
       });
     });
@@ -67,7 +79,12 @@ class _AuthGateState extends State<AuthGate> {
             child: CircularProgressIndicator(color: AppColors.primary)),
       );
     }
-    return _user == null ? const LoginScreen() : const MainShell();
+    if (_user == null) return const LoginScreen();
+    // Trial over and not subscribed — blocking paywall
+    if (_subStatus != null && !_subStatus!.hasAccess) {
+      return const PaywallScreen(blocking: true);
+    }
+    return const MainShell();
   }
 }
 

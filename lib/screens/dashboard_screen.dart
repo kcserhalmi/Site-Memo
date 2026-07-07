@@ -3,11 +3,13 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/job.dart';
 import '../providers/app_provider.dart';
+import '../services/subscription_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/press_scale.dart';
 import 'flagged_screen.dart';
 import 'job_detail_screen.dart';
+import 'paywall_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenAccount;
@@ -84,6 +86,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 builder: (_, p, __) => ListView(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                   children: [
+                    // Trial banner — hidden for Pro users and in demo mode
+                    Builder(builder: (ctx) {
+                      final sub = SubscriptionService.current;
+                      if (p.isDemoMode || sub.isPro || !sub.isTrialActive) {
+                        return const SizedBox.shrink();
+                      }
+                      return PressScale(
+                        pressedScale: 0.97,
+                        onTap: () => Navigator.push(
+                            ctx,
+                            MaterialPageRoute(
+                                builder: (_) => const PaywallScreen())),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryContainer.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppColors.primaryContainer
+                                    .withOpacity(0.35)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.workspace_premium_outlined,
+                                  color: AppColors.primary, size: 16),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Free trial — ${sub.trialDaysLeft} day${sub.trialDaysLeft == 1 ? '' : 's'} left',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary),
+                                ),
+                              ),
+                              const Text('See plans',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryFixedDim)),
+                              const Icon(Icons.chevron_right,
+                                  color: AppColors.primaryFixedDim, size: 16),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                     // Continue last inspection card
                     if (!_continueDismissed) Builder(builder: (ctx) {
                       // Find most recent inspection from today with photos
