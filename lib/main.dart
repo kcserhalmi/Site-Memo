@@ -78,6 +78,15 @@ class SiteMemoApp extends StatelessWidget {
           onSurfaceVariant: Color(0xFFD6C4AC),
           outline: Color(0xFF9E8E78),
         ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: const Color(0xFF2A2A2A),
+          contentTextStyle: const TextStyle(
+              color: Color(0xFFE5E2E1), fontSize: 13),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+          actionTextColor: const Color(0xFFFFD79B),
+        ),
         textTheme: const TextTheme(
           headlineLarge: TextStyle(
               fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: Color(0xFFE5E2E1)),

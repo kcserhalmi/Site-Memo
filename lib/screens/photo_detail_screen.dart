@@ -1,5 +1,3 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,7 +7,6 @@ import '../models/inspection_photo.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
-import '../widgets/waveform_visualizer.dart';
 import 'photo_annotation_screen.dart';
 
 IconData _iconForCategory(String cat) {
@@ -205,12 +202,18 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   Future<void> _changeCategory() async {
     final p = _photo;
     final provider = context.read<AppProvider>();
-    final job = provider.jobs.firstWhere((j) => j.id == p.jobId,
-        orElse: () => provider.jobs.first);
-    final insp = job.inspections.firstWhere((i) => i.id == p.inspectionId,
-        orElse: () => job.inspections.first);
-    final categories =
-        insp.categories.isNotEmpty ? insp.categories : <String>['UNTAGGED'];
+    List<String> categories = <String>[];
+    for (final job in provider.jobs) {
+      if (job.id != p.jobId) continue;
+      for (final insp in job.inspections) {
+        if (insp.id == p.inspectionId) {
+          categories = insp.categories;
+          break;
+        }
+      }
+      break;
+    }
+    if (categories.isEmpty) categories = <String>[p.category];
 
     final selected = await showModalBottomSheet<String>(
       context: context,
@@ -468,6 +471,7 @@ class _PhotoPageState extends State<_PhotoPage> {
           children: [
             appImage(photo.imagePath,
                 cacheWidth: 800,
+                networkUrl: photo.storageUrl,
                 fallback: Container(
                   color: AppColors.surfaceContainerHigh,
                   child: const Icon(Icons.image,
@@ -699,11 +703,6 @@ class _PhotoPageState extends State<_PhotoPage> {
     );
   }
 
-  String _fmtDur(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(1, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -967,7 +966,9 @@ class _FullPhotoScreenState extends State<FullPhotoScreen> {
                   minScale: 1.0,
                   maxScale: 5.0,
                   child: SizedBox.expand(
-                    child: appImage(widget.photos[i].imagePath, fit: BoxFit.cover),
+                    child: appImage(widget.photos[i].imagePath,
+                        fit: BoxFit.cover,
+                        networkUrl: widget.photos[i].storageUrl),
                   ),
                 ),
               ),

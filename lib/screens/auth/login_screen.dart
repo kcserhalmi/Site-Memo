@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../services/auth_service.dart';
@@ -14,6 +15,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static bool get _appleSignInSupported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+
   final _authService = AuthService();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -146,28 +152,31 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
-                const SizedBox(height: 20),
-                Row(children: [
-                  Expanded(
-                      child: Divider(color: AppColors.outlineVariant.withOpacity(0.5))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('OR',
-                        style: TextStyle(color: AppColors.outline.withOpacity(0.7), fontSize: 11)),
+                // Sign in with Apple only works on Apple platforms
+                if (_appleSignInSupported) ...[
+                  const SizedBox(height: 20),
+                  Row(children: [
+                    Expanded(
+                        child: Divider(color: AppColors.outlineVariant.withOpacity(0.5))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('OR',
+                          style: TextStyle(color: AppColors.outline.withOpacity(0.7), fontSize: 11)),
+                    ),
+                    Expanded(
+                        child: Divider(color: AppColors.outlineVariant.withOpacity(0.5))),
+                  ]),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: SignInWithAppleButton(
+                      onPressed: _loading ? () {} : _signInWithApple,
+                      style: SignInWithAppleButtonStyle.whiteOutlined,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  Expanded(
-                      child: Divider(color: AppColors.outlineVariant.withOpacity(0.5))),
-                ]),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: SignInWithAppleButton(
-                    onPressed: _loading ? () {} : _signInWithApple,
-                    style: SignInWithAppleButtonStyle.whiteOutlined,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
+                ],
                 const SizedBox(height: 28),
                 Center(
                   child: GestureDetector(

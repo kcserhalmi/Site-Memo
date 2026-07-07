@@ -5,9 +5,13 @@ Widget appImage(String path,
     {BoxFit fit = BoxFit.cover,
     Widget? fallback,
     int? cacheWidth,
-    int? cacheHeight}) {
+    int? cacheHeight,
+    String? networkUrl}) {
+  // On web the "path" is a blob URL that only lives for the session;
+  // prefer the durable cloud URL when available.
+  final src = (networkUrl != null && networkUrl.isNotEmpty) ? networkUrl : path;
   return Image.network(
-    path,
+    src,
     fit: fit,
     cacheWidth: cacheWidth,
     cacheHeight: cacheHeight,
@@ -22,6 +26,8 @@ Widget appImage(String path,
 
 bool fileExists(String path) => path.isNotEmpty;
 
-Future<String> getAudioRecordPath() async {
-  return 'voice_${DateTime.now().millisecondsSinceEpoch}.webm';
-}
+Future<String> persistPhotoFile(String srcPath) async => srcPath;
+
+Future<String> photoStorageDirPath() async => '';
+
+Future<void> deleteLocalPhotoFile(String path) async {}

@@ -161,15 +161,26 @@ class _AccountScreenState extends State<AccountScreen> {
                         Text(
                           _nameCtrl.text.isNotEmpty
                               ? _nameCtrl.text
-                              : 'Field Inspector',
+                              : (FirebaseAuth.instance.currentUser?.displayName
+                                      ?.trim()
+                                      .isNotEmpty ==
+                                  true
+                                  ? FirebaseAuth
+                                      .instance.currentUser!.displayName!
+                                  : 'Field Inspector'),
                           style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: AppColors.onSurface),
                         ),
-                        const Text('Site Memo',
-                            style: TextStyle(
-                                fontSize: 12, color: AppColors.outline)),
+                        Text(
+                          FirebaseAuth.instance.currentUser?.email ??
+                              'Site Memo',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.outline),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),

@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import 'photo_storage_service.dart';
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -85,7 +87,20 @@ class AuthService {
   Future<void> deleteAccount() async {
     final user = _auth.currentUser;
     if (user == null) return;
-    await _db.collection('users').doc(user.uid).delete();
+    final uid = user.uid;
+    // Deleting a Firestore doc does NOT delete its subcollections —
+    // remove every job doc explicitly so no data is orphaned.
+    try {
+      final jobs =
+          await _db.collection('users').doc(uid).collection('jobs').get();
+      final batch = _db.batch();
+      for (final doc in jobs.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    } catch (_) {}
+    await PhotoStorageService.deleteAllForUser(uid);
+    await _db.collection('users').doc(uid).delete();
     await user.delete();
   }
 

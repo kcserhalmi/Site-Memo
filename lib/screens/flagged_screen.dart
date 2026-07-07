@@ -127,6 +127,7 @@ class _FlaggedCard extends StatelessWidget {
                   item.photo.imagePath,
                   fit: BoxFit.cover,
                   cacheWidth: 200,
+                  networkUrl: item.photo.storageUrl,
                   fallback: Container(color: AppColors.surfaceContainerHigh),
                 ),
               ),

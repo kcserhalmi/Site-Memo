@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import 'dashboard_screen.dart';
 import 'camera_screen.dart';
@@ -20,6 +21,7 @@ class _MainShellState extends State<MainShell> {
   final List<bool> _initialized = [true, false, false, false];
 
   void _switchTab(int i) {
+    if (i != _index) HapticFeedback.selectionClick();
     setState(() {
       _initialized[i] = true;
       _index = i;
@@ -61,7 +63,6 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 68,
       decoration: BoxDecoration(
         color: AppColors.surfaceContainer,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
@@ -76,14 +77,21 @@ class _BottomNav extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _NavItem(icon: Icons.assignment_outlined, filledIcon: Icons.assignment, label: 'Jobs', selected: currentIndex == 0, onTap: () => onTap(0)),
-          _NavItem(icon: Icons.photo_camera_outlined, filledIcon: Icons.photo_camera, label: 'Camera', selected: currentIndex == 1, onTap: () => onTap(1)),
-          _NavItem(icon: Icons.search, filledIcon: Icons.search, label: 'Search', selected: currentIndex == 2, onTap: () => onTap(2)),
-          _NavItem(icon: Icons.account_circle_outlined, filledIcon: Icons.account_circle, label: 'Account', selected: currentIndex == 3, onTap: () => onTap(3)),
-        ],
+      // SafeArea keeps the nav above the iPhone home indicator
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 68,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(icon: Icons.assignment_outlined, filledIcon: Icons.assignment, label: 'Jobs', selected: currentIndex == 0, onTap: () => onTap(0)),
+              _NavItem(icon: Icons.photo_camera_outlined, filledIcon: Icons.photo_camera, label: 'Camera', selected: currentIndex == 1, onTap: () => onTap(1)),
+              _NavItem(icon: Icons.search, filledIcon: Icons.search, label: 'Search', selected: currentIndex == 2, onTap: () => onTap(2)),
+              _NavItem(icon: Icons.account_circle_outlined, filledIcon: Icons.account_circle, label: 'Account', selected: currentIndex == 3, onTap: () => onTap(3)),
+            ],
+          ),
+        ),
       ),
     );
   }

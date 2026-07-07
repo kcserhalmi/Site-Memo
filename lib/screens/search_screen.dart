@@ -127,8 +127,10 @@ class _SearchScreenState extends State<SearchScreen> {
         for (int i = 0; i < insp.photos.length; i++) {
           final p = insp.photos[i];
           if ((p.transcription?.toLowerCase().contains(_query) ?? false) ||
+              (p.caption?.toLowerCase().contains(_query) ?? false) ||
               p.category.toLowerCase().contains(_query) ||
               insp.title.toLowerCase().contains(_query) ||
+              insp.notes.toLowerCase().contains(_query) ||
               job.name.toLowerCase().contains(_query)) {
             results.add((p, i + 1, job.name, insp.title));
           }
@@ -231,6 +233,7 @@ class _PhotoResult extends StatelessWidget {
                 height: 56,
                 child: photo.imagePath.isNotEmpty
                     ? appImage(photo.imagePath, fit: BoxFit.cover,
+                        networkUrl: photo.storageUrl,
                         fallback: Container(
                             color: AppColors.surfaceContainerHigh,
                             child: const Icon(Icons.image,

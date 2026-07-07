@@ -3,6 +3,7 @@ class InspectionPhoto {
   final String jobId;
   final String inspectionId;
   String imagePath; // mutable so annotation can replace it
+  String? storageUrl; // Firebase Storage download URL once uploaded
   String? voiceNotePath;
   String? transcription;
   String? caption;
@@ -15,6 +16,7 @@ class InspectionPhoto {
     required this.jobId,
     required this.inspectionId,
     required this.imagePath,
+    this.storageUrl,
     this.voiceNotePath,
     this.transcription,
     this.caption,
@@ -28,6 +30,7 @@ class InspectionPhoto {
         'jobId': jobId,
         'inspectionId': inspectionId,
         'imagePath': imagePath,
+        'storageUrl': storageUrl,
         'voiceNotePath': voiceNotePath,
         'transcription': transcription,
         'caption': caption,
@@ -42,6 +45,7 @@ class InspectionPhoto {
         jobId: json['jobId'] as String,
         inspectionId: json['inspectionId'] as String? ?? '',
         imagePath: json['imagePath'] as String,
+        storageUrl: json['storageUrl'] as String?,
         voiceNotePath: json['voiceNotePath'] as String?,
         transcription: json['transcription'] as String?,
         caption: json['caption'] as String?,

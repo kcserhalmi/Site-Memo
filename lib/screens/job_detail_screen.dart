@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/job.dart';
 import '../models/inspection.dart';
+import '../models/inspection_photo.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_prefs.dart';
+import '../utils/file_utils.dart';
 import '../widgets/glass_card.dart';
-import 'camera_screen.dart';
 import 'inspection_detail_screen.dart';
+import 'photo_detail_screen.dart';
 
 class JobDetailScreen extends StatefulWidget {
   final Job job;
@@ -18,6 +21,7 @@ class JobDetailScreen extends StatefulWidget {
 }
 
 class _JobDetailScreenState extends State<JobDetailScreen> {
+  bool _showTimeline = false;
 
   // ── New Inspection dialog ──────────────────────────────────────────────────
   void _newInspection(BuildContext context) async {
@@ -450,23 +454,46 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ],
                 ),
               ),
-              // Inspection list
+              // View toggle: inspections list vs chronological photo timeline
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Row(
+                  children: [
+                    _ViewToggleBtn(
+                      label: 'INSPECTIONS',
+                      icon: Icons.assignment_outlined,
+                      active: !_showTimeline,
+                      onTap: () => setState(() => _showTimeline = false),
+                    ),
+                    const SizedBox(width: 8),
+                    _ViewToggleBtn(
+                      label: 'TIMELINE',
+                      icon: Icons.photo_library_outlined,
+                      active: _showTimeline,
+                      onTap: () => setState(() => _showTimeline = true),
+                    ),
+                  ],
+                ),
+              ),
+              // Inspection list or photo timeline
               Expanded(
-                child: sorted.isEmpty
-                    ? _EmptyInspections(onNew: () => _newInspection(context))
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                        itemCount: sorted.length,
-                        itemBuilder: (_, i) => _InspectionCard(
-                          inspection: sorted[i],
-                          job: job,
-                          onTap: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => InspectionDetailScreen(
-                                  job: job, inspection: sorted[i]))),
-                          onEdit: () => _editInspection(context, sorted[i]),
-                          onStatusTap: () => _cycleStatus(context, sorted[i]),
-                        ),
-                      ),
+                child: _showTimeline
+                    ? _TimelineView(job: job)
+                    : sorted.isEmpty
+                        ? _EmptyInspections(onNew: () => _newInspection(context))
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                            itemCount: sorted.length,
+                            itemBuilder: (_, i) => _InspectionCard(
+                              inspection: sorted[i],
+                              job: job,
+                              onTap: () => Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => InspectionDetailScreen(
+                                      job: job, inspection: sorted[i]))),
+                              onEdit: () => _editInspection(context, sorted[i]),
+                              onStatusTap: () => _cycleStatus(context, sorted[i]),
+                            ),
+                          ),
               ),
             ],
           ),
@@ -554,6 +581,217 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 }
 
 // ── Sub-widgets ───────────────────────────────────────────────────────────────
+
+class _ViewToggleBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _ViewToggleBtn(
+      {required this.label,
+      required this.icon,
+      required this.active,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: active
+                  ? AppColors.primaryContainer.withOpacity(0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                  color: active
+                      ? AppColors.primaryContainer.withOpacity(0.6)
+                      : AppColors.outlineVariant.withOpacity(0.5)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    color: active ? AppColors.primary : AppColors.outline,
+                    size: 14),
+                const SizedBox(width: 6),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: active ? AppColors.primary : AppColors.outline,
+                        letterSpacing: 0.4)),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+// ── Timeline: chronological photo feed across all inspections ────────────────
+
+class _TimelineView extends StatelessWidget {
+  final Job job;
+  const _TimelineView({required this.job});
+
+  String _dayLabel(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    if (day == today) return 'Today';
+    if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    return DateFormat('MMM d, yyyy').format(d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Flatten all photos across inspections, newest first
+    final all = <InspectionPhoto>[];
+    for (final insp in job.inspections) {
+      all.addAll(insp.photos);
+    }
+    all.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    if (all.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.photo_library_outlined,
+                color: AppColors.outline, size: 56),
+            SizedBox(height: 16),
+            Text('No photos yet',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurfaceVariant)),
+            SizedBox(height: 8),
+            Text('Photos from every inspection will\nappear here in order.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: AppColors.outline)),
+          ],
+        ),
+      );
+    }
+
+    // Group into day sections (list stays sorted, so sections are ordered)
+    final sections = <MapEntry<String, List<InspectionPhoto>>>[];
+    for (final p in all) {
+      final label = _dayLabel(p.timestamp);
+      if (sections.isEmpty || sections.last.key != label) {
+        sections.add(MapEntry(label, [p]));
+      } else {
+        sections.last.value.add(p);
+      }
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+      itemCount: sections.length,
+      itemBuilder: (_, si) {
+        final section = sections[si];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, top: 4),
+              child: Row(
+                children: [
+                  Text(section.key.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryFixedDim,
+                          letterSpacing: 0.5)),
+                  const SizedBox(width: 8),
+                  Text('${section.value.length}',
+                      style: const TextStyle(
+                          fontSize: 10, color: AppColors.outline)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Container(
+                          height: 0.5, color: AppColors.outlineVariant)),
+                ],
+              ),
+            ),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+              ),
+              itemCount: section.value.length,
+              itemBuilder: (_, i) {
+                final photo = section.value[i];
+                return GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => PhotoDetailScreen(
+                            photos: all, initialIndex: all.indexOf(photo))),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        appImage(photo.imagePath,
+                            cacheWidth: 300,
+                            networkUrl: photo.storageUrl,
+                            fallback: Container(
+                                color: AppColors.surfaceContainerHigh,
+                                child: const Icon(Icons.image,
+                                    color: AppColors.outline, size: 24))),
+                        if (photo.isFlagged)
+                          Positioned(
+                            top: 5,
+                            right: 5,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: AppColors.onTertiaryContainer
+                                    .withOpacity(0.85),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Icon(Icons.flag,
+                                  color: Colors.white, size: 10),
+                            ),
+                          ),
+                        Positioned(
+                          bottom: 5,
+                          left: 5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(photo.category,
+                                style: const TextStyle(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white70,
+                                    letterSpacing: 0.2)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+          ],
+        );
+      },
+    );
+  }
+}
 
 class _InspectionCard extends StatelessWidget {
   final Inspection inspection;
@@ -674,8 +912,7 @@ class _Pill extends StatelessWidget {
 class _StatBox extends StatelessWidget {
   final String label;
   final String value;
-  final bool highlight;
-  const _StatBox({required this.label, required this.value, this.highlight = false});
+  const _StatBox({required this.label, required this.value});
   @override
   Widget build(BuildContext context) => Expanded(
         child: GlassCard(
@@ -686,34 +923,10 @@ class _StatBox extends StatelessWidget {
             children: [
               Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.outline, letterSpacing: 0.4)),
               const SizedBox(height: 2),
-              Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
-                  color: highlight ? AppColors.onTertiaryContainer : AppColors.primary)),
+              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
+                  color: AppColors.primary)),
             ],
           ),
-        ),
-      );
-}
-
-class _TagChip extends StatelessWidget {
-  final String label;
-  final VoidCallback onDelete;
-  const _TagChip({required this.label, required this.onDelete});
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: AppColors.outlineVariant),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-            const SizedBox(width: 6),
-            GestureDetector(onTap: onDelete,
-                child: const Icon(Icons.close, size: 14, color: AppColors.outline)),
-          ],
         ),
       );
 }

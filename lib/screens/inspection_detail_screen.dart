@@ -403,83 +403,6 @@ class _PhotoTileState extends State<_PhotoTile> {
     return AppColors.outline;
   }
 
-  void _showOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceContainerHigh,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.open_in_full, color: AppColors.primary),
-              title: const Text('View Photo',
-                  style: TextStyle(color: AppColors.onSurface)),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          PhotoDetailScreen(photos: widget.allPhotos, initialIndex: widget.index)),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.error),
-              title: const Text('Delete Photo',
-                  style: TextStyle(color: AppColors.error)),
-              onTap: () {
-                Navigator.pop(ctx);
-                showDialog(
-                  context: context,
-                  builder: (dCtx) => AlertDialog(
-                    backgroundColor: AppColors.surfaceContainerHigh,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                    title: const Text('Delete Photo?',
-                        style: TextStyle(
-                            color: AppColors.onSurface,
-                            fontWeight: FontWeight.w700)),
-                    content: const Text(
-                        'This photo and its voice note will be permanently removed.',
-                        style: TextStyle(
-                            color: AppColors.onSurfaceVariant,
-                            fontSize: 13,
-                            height: 1.5)),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dCtx),
-                        child: const Text('CANCEL',
-                            style: TextStyle(
-                                color: AppColors.outline, fontSize: 12)),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          await context.read<AppProvider>().deletePhoto(
-                              widget.photo.jobId, widget.photo.inspectionId, widget.photo.id);
-                          if (dCtx.mounted) Navigator.pop(dCtx);
-                        },
-                        child: const Text('DELETE',
-                            style: TextStyle(
-                                color: AppColors.error,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700)),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
@@ -507,6 +430,7 @@ class _PhotoTileState extends State<_PhotoTile> {
           children: [
             appImage(widget.photo.imagePath,
                 cacheWidth: 400,
+                networkUrl: widget.photo.storageUrl,
                 fallback: Container(
                   color: AppColors.surfaceContainerHigh,
                   child:

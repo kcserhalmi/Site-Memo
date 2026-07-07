@@ -17,7 +17,8 @@ class ExportService {
 
     // Load photos as images
     final photoData = <_PhotoData>[];
-    for (final p in insp.photos) {
+    for (int i = 0; i < insp.photos.length; i++) {
+      final p = insp.photos[i];
       pw.MemoryImage? img;
       if (!kIsWeb) {
         try {
@@ -27,12 +28,25 @@ class ExportService {
       }
       photoData.add(_PhotoData(
         image: img,
+        index: i + 1,
         category: p.category,
         caption: p.caption,
         transcription: p.transcription,
         isFlagged: p.isFlagged,
       ));
     }
+
+    // Group photos by location tag, preserving the inspection's tag order.
+    final flagged = <_PhotoData>[];
+    final byCategory = <String, List<_PhotoData>>{};
+    for (final p in photoData) {
+      if (p.isFlagged) flagged.add(p);
+      byCategory.putIfAbsent(p.category, () => []).add(p);
+    }
+    final orderedCats = <String>[
+      ...insp.categories.where(byCategory.containsKey),
+      ...byCategory.keys.where((c) => !insp.categories.contains(c)),
+    ];
 
     pdf.addPage(
       pw.MultiPage(
@@ -47,6 +61,16 @@ class ExportService {
           ),
         ),
         build: (ctx) => [
+          // Summary stats
+          pw.Row(children: [
+            _statBox('PHOTOS', '${insp.photos.length}'),
+            pw.SizedBox(width: 8),
+            _statBox('FLAGGED', '${flagged.length}',
+                highlight: flagged.isNotEmpty),
+            pw.SizedBox(width: 8),
+            _statBox('LOCATIONS', '${orderedCats.length}'),
+          ]),
+          pw.SizedBox(height: 16),
           // Inspection notes
           if (insp.notes.isNotEmpty) ...[
             _sectionLabel('INSPECTION NOTES'),
@@ -62,32 +86,37 @@ class ExportService {
             ),
             pw.SizedBox(height: 20),
           ],
-          // Photo count
-          _sectionLabel('PHOTOS (${insp.photos.length})'),
-          pw.SizedBox(height: 10),
-          // Photos grid — 2 per row
-          ...() {
-            final rows = <pw.Widget>[];
-            for (int i = 0; i < photoData.length; i += 2) {
-              final left = photoData[i];
-              final right = i + 1 < photoData.length ? photoData[i + 1] : null;
-              rows.add(
-                pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Expanded(child: _photoCard(left, i + 1)),
-                    pw.SizedBox(width: 12),
-                    pw.Expanded(
-                        child: right != null
-                            ? _photoCard(right, i + 2)
-                            : pw.SizedBox()),
-                  ],
-                ),
-              );
-              rows.add(pw.SizedBox(height: 14));
-            }
-            return rows;
-          }(),
+          // Flagged items first — that's what reviewers act on
+          if (flagged.isNotEmpty) ...[
+            pw.Text('FLAGGED — NEEDS FOLLOW-UP',
+                style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.red800,
+                    letterSpacing: 0.8)),
+            pw.SizedBox(height: 8),
+            ..._photoRows(flagged),
+            pw.SizedBox(height: 10),
+          ],
+          // Photos grouped by location tag
+          ...orderedCats.expand((cat) {
+            final photos = byCategory[cat]!;
+            final note = insp.categoryNotes[cat];
+            return <pw.Widget>[
+              _sectionLabel('$cat  (${photos.length})'),
+              if (note != null && note.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(note,
+                    style: pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.grey700,
+                        fontStyle: pw.FontStyle.italic)),
+              ],
+              pw.SizedBox(height: 8),
+              ..._photoRows(photos),
+              pw.SizedBox(height: 8),
+            ];
+          }),
         ],
       ),
     );
@@ -145,6 +174,60 @@ class ExportService {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// Lays out photo cards two per row.
+  static List<pw.Widget> _photoRows(List<_PhotoData> photos) {
+    final rows = <pw.Widget>[];
+    for (int i = 0; i < photos.length; i += 2) {
+      final left = photos[i];
+      final right = i + 1 < photos.length ? photos[i + 1] : null;
+      rows.add(
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(child: _photoCard(left, left.index)),
+            pw.SizedBox(width: 12),
+            pw.Expanded(
+                child: right != null
+                    ? _photoCard(right, right.index)
+                    : pw.SizedBox()),
+          ],
+        ),
+      );
+      rows.add(pw.SizedBox(height: 14));
+    }
+    return rows;
+  }
+
+  static pw.Widget _statBox(String label, String value,
+      {bool highlight = false}) {
+    return pw.Expanded(
+      child: pw.Container(
+        padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: pw.BoxDecoration(
+          color: highlight ? PdfColors.red50 : PdfColors.grey100,
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(label,
+                style: pw.TextStyle(
+                    fontSize: 7,
+                    fontWeight: pw.FontWeight.bold,
+                    color: highlight ? PdfColors.red800 : PdfColors.grey600,
+                    letterSpacing: 0.6)),
+            pw.SizedBox(height: 2),
+            pw.Text(value,
+                style: pw.TextStyle(
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold,
+                    color: highlight ? PdfColors.red800 : PdfColors.grey800)),
+          ],
+        ),
       ),
     );
   }
@@ -311,6 +394,14 @@ class ExportService {
       buf.writeln(insp.notes);
       buf.writeln();
     }
+    if (insp.categoryNotes.isNotEmpty) {
+      buf.writeln('AREA NOTES');
+      buf.writeln('-' * 40);
+      insp.categoryNotes.forEach((cat, note) {
+        buf.writeln('$cat: $note');
+      });
+      buf.writeln();
+    }
     buf.writeln('PHOTOS (${insp.photos.length})');
     buf.writeln('-' * 40);
     for (int i = 0; i < insp.photos.length; i++) {
@@ -352,12 +443,14 @@ class ExportService {
 
 class _PhotoData {
   final pw.MemoryImage? image;
+  final int index;
   final String category;
   final String? caption;
   final String? transcription;
   final bool isFlagged;
   _PhotoData({
     required this.image,
+    required this.index,
     required this.category,
     this.caption,
     this.transcription,

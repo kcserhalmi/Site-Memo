@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import '../models/job.dart';
 import '../models/inspection.dart';
 import '../models/inspection_photo.dart';
+import '../services/photo_storage_service.dart';
+import '../utils/file_utils.dart';
 
 class AppProvider extends ChangeNotifier {
   List<Job> _jobs = [];
@@ -18,10 +20,13 @@ class AppProvider extends ChangeNotifier {
       _jobs.where((j) => j.status == 'completed').toList();
 
   // Currently selected site for camera
-  Job? get selectedSite => _selectedSiteId == null
-      ? null
-      : _jobs.firstWhere((j) => j.id == _selectedSiteId!,
-          orElse: () => _jobs.isNotEmpty ? _jobs.first : _jobs.first);
+  Job? get selectedSite {
+    if (_selectedSiteId == null) return null;
+    for (final j in _jobs) {
+      if (j.id == _selectedSiteId) return j;
+    }
+    return _jobs.isNotEmpty ? _jobs.first : null;
+  }
 
   // Currently selected inspection for camera
   Inspection? get selectedInspection {
@@ -80,6 +85,8 @@ class AppProvider extends ChangeNotifier {
     // Auto-select first active site + its latest inspection
     _autoSelect();
     notifyListeners();
+    // Retry any photo uploads that didn't finish last session
+    syncPendingUploads();
   }
 
   Future<void> _persistJob(Job job) async {
@@ -207,6 +214,14 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteJob(String jobId) async {
+    final ji = _jobs.indexWhere((j) => j.id == jobId);
+    if (ji != -1) {
+      for (final insp in _jobs[ji].inspections) {
+        for (final photo in insp.photos) {
+          _cleanupPhotoFiles(photo);
+        }
+      }
+    }
     _jobs.removeWhere((j) => j.id == jobId);
     if (_selectedSiteId == jobId) {
       _selectedSiteId = _jobs.isNotEmpty ? _jobs.first.id : null;
@@ -320,6 +335,13 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteInspection(String jobId, String inspectionId) async {
     final i = _jobs.indexWhere((j) => j.id == jobId);
     if (i == -1) return;
+    for (final insp in _jobs[i].inspections) {
+      if (insp.id == inspectionId) {
+        for (final photo in insp.photos) {
+          _cleanupPhotoFiles(photo);
+        }
+      }
+    }
     _jobs[i].inspections.removeWhere((insp) => insp.id == inspectionId);
     _jobs[i].updatedAt = DateTime.now();
     if (_selectedInspectionId == inspectionId) {
@@ -344,6 +366,54 @@ class AppProvider extends ChangeNotifier {
     _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
     notifyListeners();
+    // Back up to cloud in the background — non-blocking so capture stays fast
+    _uploadPhotoIfNeeded(_jobs[ji], photo);
+  }
+
+  // ── Cloud photo backup ─────────────────────────────────────────────────────
+
+  final Set<String> _uploading = {};
+
+  /// Uploads a photo to Firebase Storage if it has no cloud copy yet.
+  /// Fire-and-forget: failures are silent and retried on next app load.
+  Future<void> _uploadPhotoIfNeeded(Job job, InspectionPhoto photo) async {
+    final uid = _uid;
+    if (uid == null) return;
+    if (photo.storageUrl != null || _uploading.contains(photo.id)) return;
+    if (!fileExists(photo.imagePath)) return;
+    _uploading.add(photo.id);
+    try {
+      final url =
+          await PhotoStorageService.upload(uid, photo.id, photo.imagePath);
+      photo.storageUrl = url;
+      await _persistJob(job);
+      notifyListeners();
+    } catch (_) {
+      // Offline or storage error — syncPendingUploads retries later.
+    } finally {
+      _uploading.remove(photo.id);
+    }
+  }
+
+  /// Retries any photos that never made it to the cloud (e.g. captured
+  /// offline). Called after load; safe to call any time.
+  void syncPendingUploads() {
+    for (final job in _jobs) {
+      for (final insp in job.inspections) {
+        for (final photo in insp.photos) {
+          if (photo.storageUrl == null) _uploadPhotoIfNeeded(job, photo);
+        }
+      }
+    }
+  }
+
+  /// Best-effort cleanup of a photo's local file and cloud copy.
+  void _cleanupPhotoFiles(InspectionPhoto photo) {
+    deleteLocalPhotoFile(photo.imagePath);
+    final uid = _uid;
+    if (uid != null && photo.storageUrl != null) {
+      PhotoStorageService.delete(uid, photo.id);
+    }
   }
 
   Future<void> toggleFlag(
@@ -370,6 +440,7 @@ class AppProvider extends ChangeNotifier {
         _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
     if (ii == -1) return;
     _jobs[ji].inspections[ii].notes = notes;
+    _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
     notifyListeners();
   }
@@ -385,6 +456,7 @@ class AppProvider extends ChangeNotifier {
         .indexWhere((p) => p.id == photoId);
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].caption = caption;
+    _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
     notifyListeners();
   }
@@ -400,6 +472,7 @@ class AppProvider extends ChangeNotifier {
         .indexWhere((p) => p.id == photoId);
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].category = category;
+    _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
     notifyListeners();
   }
@@ -416,6 +489,7 @@ class AppProvider extends ChangeNotifier {
     if (pi == -1) return;
     _jobs[ji].inspections[ii].photos[pi].voiceNotePath = voiceNotePath;
     _jobs[ji].inspections[ii].photos[pi].transcription = transcription;
+    _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
     notifyListeners();
   }
@@ -427,6 +501,9 @@ class AppProvider extends ChangeNotifier {
     final ii =
         _jobs[ji].inspections.indexWhere((i) => i.id == inspectionId);
     if (ii == -1) return;
+    for (final p in _jobs[ji].inspections[ii].photos) {
+      if (p.id == photoId) _cleanupPhotoFiles(p);
+    }
     _jobs[ji].inspections[ii].photos.removeWhere((p) => p.id == photoId);
     _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
@@ -444,9 +521,25 @@ class AppProvider extends ChangeNotifier {
     final pi = _jobs[ji].inspections[ii].photos
         .indexWhere((p) => p.id == photoId);
     if (pi == -1) return;
-    _jobs[ji].inspections[ii].photos[pi].imagePath = newImagePath;
+    final photo = _jobs[ji].inspections[ii].photos[pi];
+    // Annotated image replaces the original: drop the old local file and
+    // stale cloud copy, then re-upload the new image.
+    if (photo.imagePath != newImagePath) {
+      deleteLocalPhotoFile(photo.imagePath);
+    }
+    photo.imagePath = newImagePath;
+    photo.storageUrl = null;
+    _jobs[ji].updatedAt = DateTime.now();
     await _persistJob(_jobs[ji]);
     notifyListeners();
+    // Remove the stale remote copy first so the re-upload can't be
+    // clobbered by the delete, then upload the annotated image.
+    final job = _jobs[ji];
+    final uid = _uid;
+    () async {
+      if (uid != null) await PhotoStorageService.delete(uid, photo.id);
+      await _uploadPhotoIfNeeded(job, photo);
+    }();
   }
 
   String generateId() => _uuid.v4();

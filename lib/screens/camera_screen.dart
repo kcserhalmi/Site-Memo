@@ -1,11 +1,11 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/inspection.dart';
 import '../models/inspection_photo.dart';
-import '../models/job.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_prefs.dart';
@@ -75,7 +75,11 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startController(int index) async {
     await _ctrl?.dispose();
-    _ctrl = CameraController(_cameras[index], ResolutionPreset.max,
+    // Respect the "High Quality Photos" preference — high (~1080p) keeps
+    // files small for everyday documentation; max uses the full sensor.
+    final hq = await AppPrefs.getHighQuality();
+    _ctrl = CameraController(
+        _cameras[index], hq ? ResolutionPreset.max : ResolutionPreset.high,
         enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
     await _ctrl!.initialize();
     _minZoom = await _ctrl!.getMinZoomLevel();
@@ -146,6 +150,7 @@ class _CameraScreenState extends State<CameraScreen>
 
       if (_burstMode) {
         // ── BURST: use controller for instant capture ──────────────────
+        HapticFeedback.mediumImpact();
         XFile? file;
         if (_cameraReady && _ctrl != null) {
           file = await _ctrl!.takePicture();
@@ -156,14 +161,18 @@ class _CameraScreenState extends State<CameraScreen>
               maxWidth: hq ? 4096 : 2048);
         }
         if (file == null || !mounted) return;
-        setState(() => _lastThumb = file!.path);
+        // Move out of the OS temp/cache dir — temp files can be purged
+        final savedPath = await persistPhotoFile(file.path);
+        if (!mounted) return;
+        setState(() => _lastThumb = savedPath);
         final photo = InspectionPhoto(
           id: provider.generateId(),
           jobId: site.id, inspectionId: insp.id,
-          imagePath: file.path, category: location,
+          imagePath: savedPath, category: location,
           timestamp: DateTime.now(),
         );
         await provider.addPhoto(site.id, insp.id, photo);
+        if (!mounted) return;
         setState(() { _burstCount++; _burstFlash = true; });
         Future.delayed(const Duration(milliseconds: 220), () {
           if (mounted) setState(() => _burstFlash = false);
@@ -176,6 +185,7 @@ class _CameraScreenState extends State<CameraScreen>
         // native crash. We hide preview (cameraReady=false) so
         // _buildViewfinder returns a plain Container, then navigate safely.
 
+        HapticFeedback.mediumImpact();
         XFile? file;
         if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
           try { file = await _ctrl!.takePicture(); }
@@ -186,7 +196,9 @@ class _CameraScreenState extends State<CameraScreen>
         }
         if (file == null || !mounted) return;
 
-        final imagePath = file.path;
+        // Move out of the OS temp/cache dir — temp files can be purged
+        final imagePath = await persistPhotoFile(file.path);
+        if (!mounted) return;
 
         // Remove CameraPreview from tree before navigation
         setState(() { _lastThumb = imagePath; _cameraReady = false; });
@@ -665,7 +677,6 @@ class _CameraScreenState extends State<CameraScreen>
                   onTap: () {
                     final insp = context.read<AppProvider>().selectedInspection;
                     if (insp != null && insp.photos.isNotEmpty) {
-                      final last = insp.photos.last;
                       Navigator.push(context, MaterialPageRoute(
                         builder: (_) => PhotoDetailScreen(
                           photos: insp.photos,
@@ -808,9 +819,9 @@ class _SiteSelectorSheetState extends State<_SiteSelectorSheet> {
     final activeSites = provider.activeJobs;
     final currentSiteId =
         _pendingSiteId ?? provider.selectedSite?.id ?? (activeSites.isNotEmpty ? activeSites.first.id : null);
-    final currentSite = currentSiteId != null
+    final currentSite = (currentSiteId != null && activeSites.isNotEmpty)
         ? activeSites.firstWhere((j) => j.id == currentSiteId,
-            orElse: () => activeSites.isNotEmpty ? activeSites.first : activeSites.first)
+            orElse: () => activeSites.first)
         : null;
 
     return DraggableScrollableSheet(

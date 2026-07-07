@@ -152,6 +152,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       );
                     }),
+                    if (p.jobs.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 100),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.add_business_outlined,
+                                color: AppColors.outline, size: 56),
+                            const SizedBox(height: 16),
+                            const Text('No job sites yet',
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.onSurfaceVariant)),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Create a site below, then start\ncapturing photos from the Camera tab.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.outline.withOpacity(0.8),
+                                  height: 1.5),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (p.activeJobs.isNotEmpty) ...[
                       _SectionLabel('Active'),
                       ...p.activeJobs
@@ -217,7 +242,7 @@ class _Header extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: AppColors.onSurface)),
                 Text(
-                  '${p.jobs.length} jobs · $month',
+                  '${p.activeJobs.length} active · ${p.totalPhotoCount} photos · $month',
                   style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -617,42 +642,6 @@ class _ContinueCardState extends State<_ContinueCard> {
     );
   }
 }
-
-class _IssueChip extends StatelessWidget {
-  final int count;
-  const _IssueChip({required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.onTertiaryContainer.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-            color: AppColors.onTertiaryContainer.withOpacity(0.3)),
-        boxShadow: [
-          BoxShadow(
-              color: AppColors.errorContainer.withOpacity(0.35),
-              blurRadius: 10)
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.flag, color: AppColors.onTertiaryContainer, size: 12),
-          const SizedBox(width: 4),
-          Text('$count ISSUES',
-              style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onTertiaryContainer)),
-        ],
-      ),
-    );
-  }
-}
-
 
 class _Field extends StatelessWidget {
   final TextEditingController controller;

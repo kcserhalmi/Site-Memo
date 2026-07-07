@@ -6,8 +6,6 @@ import 'package:speech_to_text/speech_to_text.dart';
 import '../models/inspection_photo.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
-import '../widgets/glass_card.dart';
-import '../widgets/waveform_visualizer.dart';
 
 class TagNoteScreen extends StatefulWidget {
   final String imagePath;
@@ -58,16 +56,20 @@ class _TagNoteScreenState extends State<TagNoteScreen> {
     // Init speech in background — non-blocking so screen loads instantly
     _initSpeechBackground();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final provider = context.read<AppProvider>();
-      final job = provider.jobs.firstWhere(
-        (j) => j.id == widget.jobId,
-        orElse: () => provider.jobs.first,
-      );
-      final insp = job.inspections.firstWhere(
-        (i) => i.id == widget.inspectionId,
-        orElse: () => job.inspections.isNotEmpty ? job.inspections.first : job.inspections.first,
-      );
-      setState(() => _jobCategories = List.from(insp.categories));
+      List<String>? cats;
+      for (final job in provider.jobs) {
+        if (job.id != widget.jobId) continue;
+        for (final insp in job.inspections) {
+          if (insp.id == widget.inspectionId) {
+            cats = List.from(insp.categories);
+            break;
+          }
+        }
+        break;
+      }
+      if (cats != null) setState(() => _jobCategories = cats!);
     });
   }
 
