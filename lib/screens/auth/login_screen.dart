@@ -81,10 +81,25 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Brand mark
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: AppColors.primaryContainer.withOpacity(0.14),
+                    border: Border.all(
+                        color: AppColors.primaryContainer.withOpacity(0.4)),
+                  ),
+                  child: const Icon(Icons.photo_camera_outlined,
+                      color: AppColors.primary, size: 28),
+                ),
+                const SizedBox(height: 18),
                 const Text('Site Memo',
                     style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
                         color: AppColors.onSurface)),
                 const SizedBox(height: 6),
                 Text('Built for the field.',

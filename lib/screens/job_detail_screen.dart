@@ -514,7 +514,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryContainer,
                               foregroundColor: AppColors.onPrimaryContainer,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               elevation: 8,
                               shadowColor: AppColors.primaryContainer.withOpacity(0.4),
                             ),

@@ -5,6 +5,7 @@ import '../models/job.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/press_scale.dart';
 import 'flagged_screen.dart';
 import 'job_detail_screen.dart';
 
@@ -113,7 +114,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Builder(builder: (ctx) {
                       final totalFlagged = p.totalFlaggedCount;
                       if (totalFlagged == 0) return const SizedBox.shrink();
-                      return GestureDetector(
+                      return PressScale(
+                        pressedScale: 0.97,
                         onTap: () => Navigator.push(ctx,
                             MaterialPageRoute(builder: (_) => const FlaggedScreen())),
                         child: Container(
@@ -206,7 +208,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               backgroundColor: AppColors.primaryContainer,
               foregroundColor: AppColors.onPrimaryContainer,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(14)),
               elevation: 8,
               shadowColor: AppColors.primaryContainer.withOpacity(0.4),
             ),
@@ -251,7 +253,7 @@ class _Header extends StatelessWidget {
                 ),
               ],
             ),
-            GestureDetector(
+            PressScale(
               onTap: onOpenAccount,
               child: Container(
                 width: 38,

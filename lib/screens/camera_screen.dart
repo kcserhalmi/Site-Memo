@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../utils/app_prefs.dart';
 import '../utils/file_utils.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/press_scale.dart';
 import 'tag_note_screen.dart';
 import 'photo_detail_screen.dart';
 
@@ -44,6 +45,10 @@ class _CameraScreenState extends State<CameraScreen>
   // Tap-to-focus indicator
   Offset? _focusPoint;
   bool _showFocus = false;
+  // Rule-of-thirds composition grid
+  bool _showGrid = false;
+  // Shutter press feedback
+  bool _shutterPressed = false;
 
   bool get _isDesktop {
     if (kIsWeb) return false;
@@ -437,21 +442,18 @@ class _CameraScreenState extends State<CameraScreen>
                     Row(
                       children: [
                         if (canPop) ...[
-                          GestureDetector(
+                          GlassCard(
                             onTap: () => Navigator.pop(context),
-                            child: GlassCard(
-                              padding: const EdgeInsets.all(9),
-                              borderRadius: BorderRadius.circular(99),
-                              child: const Icon(Icons.arrow_back,
-                                  color: AppColors.onSurface, size: 20),
-                            ),
+                            padding: const EdgeInsets.all(9),
+                            borderRadius: BorderRadius.circular(99),
+                            child: const Icon(Icons.arrow_back,
+                                color: AppColors.onSurface, size: 20),
                           ),
                           const SizedBox(width: 8),
                         ],
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () => _showSiteSelector(context),
-                            child: GlassCard(
+                          child: GlassCard(
+                              onTap: () => _showSiteSelector(context),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 7),
                               borderRadius: BorderRadius.circular(10),
@@ -493,39 +495,47 @@ class _CameraScreenState extends State<CameraScreen>
                                 ],
                               ),
                             ),
-                          ),
                         ),
                         const SizedBox(width: 8),
                         if (canFlip) ...[
-                          GestureDetector(
+                          GlassCard(
                             onTap: _flipCamera,
-                            child: GlassCard(
-                              padding: const EdgeInsets.all(9),
-                              borderRadius: BorderRadius.circular(99),
-                              child: const Icon(Icons.flip_camera_ios,
-                                  color: AppColors.onSurface, size: 18),
-                            ),
+                            padding: const EdgeInsets.all(9),
+                            borderRadius: BorderRadius.circular(99),
+                            child: const Icon(Icons.flip_camera_ios,
+                                color: AppColors.onSurface, size: 18),
                           ),
                           const SizedBox(width: 6),
                         ],
-                        GestureDetector(
+                        GlassCard(
+                          onTap: () => setState(() => _showGrid = !_showGrid),
+                          padding: const EdgeInsets.all(9),
+                          borderRadius: BorderRadius.circular(99),
+                          child: Icon(
+                            _showGrid ? Icons.grid_on : Icons.grid_off,
+                            color: _showGrid
+                                ? AppColors.primary
+                                : AppColors.outline,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GlassCard(
                           onTap: _toggleFlash,
-                          child: GlassCard(
-                            padding: const EdgeInsets.all(9),
-                            borderRadius: BorderRadius.circular(99),
-                            child: Icon(
-                              _flashMode == FlashMode.off
-                                  ? Icons.flash_off
-                                  : _flashMode == FlashMode.auto
-                                      ? Icons.flash_auto
-                                      : Icons.flash_on,
-                              color: _flashMode == FlashMode.off
-                                  ? (_cameraReady ? AppColors.outline : AppColors.outline)
-                                  : _flashMode == FlashMode.auto
-                                      ? AppColors.primary
-                                      : const Color(0xFFFFD600),
-                              size: 18,
-                            ),
+                          padding: const EdgeInsets.all(9),
+                          borderRadius: BorderRadius.circular(99),
+                          child: Icon(
+                            _flashMode == FlashMode.off
+                                ? Icons.flash_off
+                                : _flashMode == FlashMode.auto
+                                    ? Icons.flash_auto
+                                    : Icons.flash_on,
+                            color: _flashMode == FlashMode.off
+                                ? AppColors.outline
+                                : _flashMode == FlashMode.auto
+                                    ? AppColors.primary
+                                    : const Color(0xFFFFD600),
+                            size: 18,
                           ),
                         ),
                       ],
@@ -654,6 +664,48 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
+          // Bottom scrim — keeps controls readable over bright scenes
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 210,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Color(0xB8000000), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Zoom level indicator
+          if (_cameraReady && _zoomLevel > _minZoom + 0.05)
+            Positioned(
+              bottom: 150, left: 0, right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(
+                          color: AppColors.primary.withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      '${_zoomLevel.toStringAsFixed(1)}×',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // Category strip
           Positioned(
             bottom: 96, left: 0, right: 0,
@@ -661,7 +713,10 @@ class _CameraScreenState extends State<CameraScreen>
               categories: cats,
               selectedIndex: _catIndex.clamp(0, cats.length - 1),
               categoryNotes: insp?.categoryNotes ?? {},
-              onSelect: (i) => setState(() => _catIndex = i),
+              onSelect: (i) {
+                HapticFeedback.selectionClick();
+                setState(() => _catIndex = i);
+              },
               onAddLocation: () => _addLocationTag(context),
               onLongPress: (cat) => _editCategoryNote(context, cat),
             ),
@@ -673,7 +728,7 @@ class _CameraScreenState extends State<CameraScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                GestureDetector(
+                PressScale(
                   onTap: () {
                     final insp = context.read<AppProvider>().selectedInspection;
                     if (insp != null && insp.photos.isNotEmpty) {
@@ -684,45 +739,69 @@ class _CameraScreenState extends State<CameraScreen>
                       ));
                     }
                   },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 48, height: 48,
-                      child: _lastThumb != null
-                          ? appImage(_lastThumb!, cacheWidth: 100)
-                          : Container(color: AppColors.surfaceContainerHigh),
+                  child: Container(
+                    width: 50, height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.3), width: 1),
                     ),
+                    clipBehavior: Clip.hardEdge,
+                    child: _lastThumb != null
+                        ? appImage(_lastThumb!, cacheWidth: 100)
+                        : Container(
+                            color: Colors.black.withOpacity(0.35),
+                            child: Icon(Icons.photo_outlined,
+                                color: Colors.white.withOpacity(0.4),
+                                size: 20),
+                          ),
                   ),
                 ),
+                // Shutter — outer ring stays fixed, inner disc springs
                 GestureDetector(
                   onTap: _isCapturing ? null : () => _capture(context),
-                  child: AnimatedScale(
-                    scale: _isCapturing ? 0.9 : 1.0,
-                    duration: const Duration(milliseconds: 100),
-                    child: Container(
-                      width: 76, height: 76,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.12),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.25), width: 2),
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: Container(
-                          decoration: const BoxDecoration(
-                              shape: BoxShape.circle, color: Colors.white)),
+                  onTapDown: (_) => setState(() => _shutterPressed = true),
+                  onTapUp: (_) => setState(() => _shutterPressed = false),
+                  onTapCancel: () => setState(() => _shutterPressed = false),
+                  child: SizedBox(
+                    width: 80, height: 80,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 80, height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: Colors.white.withOpacity(0.9),
+                                width: 3),
+                          ),
+                        ),
+                        AnimatedScale(
+                          scale: (_shutterPressed || _isCapturing) ? 0.75 : 1.0,
+                          duration: const Duration(milliseconds: 110),
+                          curve: Curves.easeOut,
+                          child: Container(
+                            width: 64, height: 64,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _burstMode
+                                  ? Colors.white
+                                  : AppColors.primaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                GestureDetector(
+                GlassCard(
                   onTap: canFlip ? _flipCamera : null,
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(12),
-                    borderRadius: BorderRadius.circular(99),
-                    child: Icon(Icons.flip_camera_ios,
-                        color: canFlip ? AppColors.onSurface : AppColors.outline,
-                        size: 22),
-                  ),
+                  padding: const EdgeInsets.all(13),
+                  borderRadius: BorderRadius.circular(99),
+                  child: Icon(Icons.flip_camera_ios,
+                      color: canFlip ? AppColors.onSurface : AppColors.outline,
+                      size: 22),
                 ),
               ],
             ),
@@ -770,6 +849,12 @@ class _CameraScreenState extends State<CameraScreen>
             },
             child: CameraPreview(_ctrl!),
           ),
+          // Rule-of-thirds composition grid
+          if (_showGrid)
+            IgnorePointer(
+              child: CustomPaint(
+                  painter: _GridPainter(opacity: 0.30), size: Size.infinite),
+            ),
           // Focus indicator square
           if (_showFocus && _focusPoint != null)
             Positioned(
@@ -1001,18 +1086,22 @@ class _SiteSelectorSheetState extends State<_SiteSelectorSheet> {
 // ── Camera UI helpers ─────────────────────────────────────────────────────────
 
 class _GridPainter extends CustomPainter {
+  final double opacity;
+  _GridPainter({this.opacity = 0.04});
+
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()
-      ..color = Colors.white.withOpacity(0.04)
+      ..color = Colors.white.withOpacity(opacity)
       ..strokeWidth = 0.5;
     for (int i = 1; i < 3; i++) {
       c.drawLine(Offset(s.width * i / 3, 0), Offset(s.width * i / 3, s.height), p);
       c.drawLine(Offset(0, s.height * i / 3), Offset(s.width, s.height * i / 3), p);
     }
   }
+
   @override
-  bool shouldRepaint(_) => false;
+  bool shouldRepaint(_GridPainter old) => old.opacity != opacity;
 }
 
 class _CategoryStrip extends StatelessWidget {
@@ -1135,7 +1224,10 @@ class _ModeBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

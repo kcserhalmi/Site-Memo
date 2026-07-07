@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 // BackdropFilter/blur removed — too expensive on iOS GPU.
 // Solid semi-transparent surface achieves the same dark-glass look
@@ -29,16 +30,20 @@ class _GlassCardState extends State<GlassCard> {
   @override
   Widget build(BuildContext context) {
     final br = widget.borderRadius ?? BorderRadius.circular(12);
+    final interactive = widget.onTap != null;
     Widget card = AnimatedScale(
-      scale: (_pressed && widget.onTap != null) ? 0.97 : 1.0,
+      scale: (_pressed && interactive) ? 0.97 : 1.0,
       duration: const Duration(milliseconds: 130),
       curve: const Cubic(0.23, 1.0, 0.32, 1.0),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 130),
         decoration: BoxDecoration(
-          color: widget.color ?? const Color(0xFF222221),
+          color: (_pressed && interactive)
+              ? const Color(0xFF26282D)
+              : (widget.color ?? const Color(0xFF1E2024)),
           borderRadius: br,
           border: Border.all(
-            color: Colors.white.withOpacity(0.11),
+            color: Colors.white.withOpacity(_pressed && interactive ? 0.16 : 0.09),
             width: 0.5,
           ),
         ),
@@ -47,9 +52,12 @@ class _GlassCardState extends State<GlassCard> {
       ),
     );
 
-    if (widget.onTap != null) {
+    if (interactive) {
       return GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap!();
+        },
         onTapDown: (_) => setState(() => _pressed = true),
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),
