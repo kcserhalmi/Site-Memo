@@ -22,6 +22,7 @@ class _AuthGateState extends State<AuthGate> {
   StreamSubscription<User?>? _sub;
   User? _user;
   bool _ready = false;
+  bool _demoStarted = false;
 
   @override
   void initState() {
@@ -50,7 +51,14 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (widget.firebaseError != null) {
-      return _FirebaseSetupError(error: widget.firebaseError!);
+      if (_demoStarted) return const MainShell();
+      return _FirebaseSetupError(
+        error: widget.firebaseError!,
+        onDemoMode: () async {
+          await context.read<AppProvider>().enterDemoMode();
+          if (mounted) setState(() => _demoStarted = true);
+        },
+      );
     }
     if (!_ready) {
       return const Scaffold(
@@ -65,7 +73,8 @@ class _AuthGateState extends State<AuthGate> {
 
 class _FirebaseSetupError extends StatelessWidget {
   final String error;
-  const _FirebaseSetupError({required this.error});
+  final VoidCallback onDemoMode;
+  const _FirebaseSetupError({required this.error, required this.onDemoMode});
 
   @override
   Widget build(BuildContext context) {
@@ -80,20 +89,39 @@ class _FirebaseSetupError extends StatelessWidget {
             children: [
               const Icon(Icons.cloud_off, color: AppColors.error, size: 40),
               const SizedBox(height: 16),
-              const Text('Firebase isn\'t configured yet',
+              const Text('Firebase isn\'t configured\non this device',
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
+                      height: 1.3,
                       color: AppColors.onSurface)),
               const SizedBox(height: 12),
               const Text(
-                'Run "flutterfire configure" from the project root to '
-                'generate lib/firebase_options.dart with your real Firebase '
-                'project credentials, then rebuild the app.',
+                'Sign-in and cloud sync need Firebase credentials. Run '
+                '"flutterfire configure" from the project root to generate '
+                'lib/firebase_options.dart for this platform, then rebuild.\n\n'
+                'You can still explore the full app with sample data — '
+                'nothing will be saved or synced.',
                 style: TextStyle(
                     fontSize: 14, color: AppColors.onSurfaceVariant, height: 1.5),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: onDemoMode,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryContainer,
+                    foregroundColor: AppColors.onPrimaryContainer,
+                  ),
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('EXPLORE IN DEMO MODE',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                ),
+              ),
+              const SizedBox(height: 20),
               Text(error,
                   style: const TextStyle(
                       fontSize: 11, color: AppColors.outline, fontFamily: 'monospace')),

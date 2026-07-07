@@ -9,8 +9,11 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'photo_storage_service.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  // Lazy getters — FirebaseAuth.instance throws if Firebase failed to
+  // initialize (e.g. unconfigured platform), so never touch it at
+  // construction time.
+  FirebaseAuth get _auth => FirebaseAuth.instance;
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;

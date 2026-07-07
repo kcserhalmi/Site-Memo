@@ -65,6 +65,21 @@ class AppProvider extends ChangeNotifier {
     await loadData();
   }
 
+  bool _demoMode = false;
+  bool get isDemoMode => _demoMode;
+
+  /// Runs the app entirely in memory with sample data — used when Firebase
+  /// isn't configured on this platform (e.g. desktop dev machines).
+  /// Nothing persists or uploads: _uid stays null so every remote call
+  /// no-ops.
+  Future<void> enterDemoMode() async {
+    _demoMode = true;
+    _uid = null;
+    await _seedSampleData();
+    _autoSelect();
+    notifyListeners();
+  }
+
   Future<void> loadData() async {
     final collection = _jobsCollection;
     if (collection == null) return;

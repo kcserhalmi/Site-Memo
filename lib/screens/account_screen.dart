@@ -15,6 +15,16 @@ class AccountScreen extends StatefulWidget {
 class _AccountScreenState extends State<AccountScreen> {
   final _nameCtrl = TextEditingController();
   final _authService = AuthService();
+
+  /// Safe lookup — FirebaseAuth.instance throws when Firebase never
+  /// initialized (demo mode on unconfigured platforms).
+  User? get _fbUser {
+    try {
+      return FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
   bool _autoTranscribe = true;
   bool _highQuality = false;
   bool _loaded = false;
@@ -73,7 +83,14 @@ class _AccountScreenState extends State<AccountScreen> {
       ),
     );
     if (confirmed == true) {
-      await _authService.signOut();
+      try {
+        await _authService.signOut();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Not available in demo mode')));
+        }
+      }
     }
   }
 
@@ -161,12 +178,9 @@ class _AccountScreenState extends State<AccountScreen> {
                         Text(
                           _nameCtrl.text.isNotEmpty
                               ? _nameCtrl.text
-                              : (FirebaseAuth.instance.currentUser?.displayName
-                                      ?.trim()
-                                      .isNotEmpty ==
-                                  true
-                                  ? FirebaseAuth
-                                      .instance.currentUser!.displayName!
+                              : (_fbUser?.displayName?.trim().isNotEmpty ==
+                                      true
+                                  ? _fbUser!.displayName!
                                   : 'Field Inspector'),
                           style: const TextStyle(
                               fontSize: 16,
@@ -174,8 +188,7 @@ class _AccountScreenState extends State<AccountScreen> {
                               color: AppColors.onSurface),
                         ),
                         Text(
-                          FirebaseAuth.instance.currentUser?.email ??
-                              'Site Memo',
+                          _fbUser?.email ?? 'Site Memo',
                           style: const TextStyle(
                               fontSize: 12, color: AppColors.outline),
                           maxLines: 1,
@@ -278,10 +291,10 @@ class _AccountScreenState extends State<AccountScreen> {
             // ── Account ─────────────────────────────────────────────────
             const _SectionLabel('ACCOUNT'),
             const SizedBox(height: 8),
-            if (FirebaseAuth.instance.currentUser?.email != null)
+            if (_fbUser?.email != null)
               Padding(
                 padding: const EdgeInsets.only(left: 4, bottom: 6),
-                child: Text(FirebaseAuth.instance.currentUser!.email!,
+                child: Text(_fbUser!.email!,
                     style: const TextStyle(fontSize: 12, color: AppColors.outline)),
               ),
             GlassCard(
