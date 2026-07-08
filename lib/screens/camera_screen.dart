@@ -85,11 +85,10 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startController(int index) async {
     await _ctrl?.dispose();
-    // Respect the "High Quality Photos" preference — high (~1080p) keeps
-    // files small for everyday documentation; max uses the full sensor.
-    final hq = await AppPrefs.getHighQuality();
-    _ctrl = CameraController(
-        _cameras[index], hq ? ResolutionPreset.max : ResolutionPreset.high,
+    // Always capture at the sensor's full resolution — same quality as the
+    // native iPhone camera. (The High Quality pref still governs the
+    // desktop/gallery picker path.)
+    _ctrl = CameraController(_cameras[index], ResolutionPreset.max,
         enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
     await _ctrl!.initialize();
     _minZoom = await _ctrl!.getMinZoomLevel();
@@ -833,69 +832,84 @@ class _CameraScreenState extends State<CameraScreen>
 
   Widget _buildViewfinder() {
     if (_cameraReady && _ctrl != null && _ctrl!.value.isInitialized) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          GestureDetector(
-            onScaleStart: (_) => _baseZoom = _zoomLevel,
-            onScaleUpdate: (d) async {
-              if (d.pointerCount < 2) return;
-              final z = (_baseZoom * d.scale).clamp(_minZoom, _maxZoom);
-              if ((z - _zoomLevel).abs() > 0.05) {
-                setState(() => _zoomLevel = z);
-                try { await _ctrl!.setZoomLevel(z); } catch (_) {}
-              }
-            },
-            onTapUp: (d) async {
-              final size = _ctrl!.value.previewSize;
-              if (size == null) return;
-              // Normalize tap position to 0-1 range
-              final renderBox = context.findRenderObject() as RenderBox?;
-              if (renderBox == null) return;
-              final localPos = d.localPosition;
-              final w = renderBox.size.width;
-              final h = renderBox.size.height;
-              final x = (localPos.dx / w).clamp(0.0, 1.0);
-              final y = (localPos.dy / h).clamp(0.0, 1.0);
-              try {
-                await _ctrl!.setFocusMode(FocusMode.auto);
-                await _ctrl!.setFocusPoint(Offset(x, y));
-                await _ctrl!.setExposurePoint(Offset(x, y));
-              } catch (_) {}
-              setState(() { _focusPoint = localPos; _showFocus = true; });
-              Future.delayed(const Duration(milliseconds: 1200), () {
-                if (mounted) setState(() => _showFocus = false);
-              });
-            },
-            child: CameraPreview(_ctrl!),
-          ),
-          // Rule-of-thirds composition grid
-          if (_showGrid)
-            IgnorePointer(
-              child: CustomPaint(
-                  painter: _GridPainter(opacity: 0.30), size: Size.infinite),
-            ),
-          // Focus indicator square
-          if (_showFocus && _focusPoint != null)
-            Positioned(
-              left: _focusPoint!.dx - 28,
-              top: _focusPoint!.dy - 28,
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: _showFocus ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: Container(
-                    width: 56, height: 56,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                          color: AppColors.primaryContainer, width: 1.5),
-                      borderRadius: BorderRadius.circular(4),
+      // Show the frame at the sensor's true aspect ratio (like the iPhone
+      // camera app) instead of stretching it to fill the screen. What you
+      // see in the viewfinder is exactly what the saved photo contains.
+      final sensorAR = _ctrl!.value.aspectRatio; // landscape width/height
+      final portraitAR = sensorAR > 1 ? 1 / sensorAR : sensorAR;
+      return Container(
+        color: Colors.black,
+        // Bias the frame toward the top so the category strip and shutter
+        // sit in the black area below it, not over the picture.
+        alignment: const Alignment(0, -0.3),
+        child: AspectRatio(
+          aspectRatio: portraitAR,
+          child: LayoutBuilder(
+            builder: (_, constraints) => Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  onScaleStart: (_) => _baseZoom = _zoomLevel,
+                  onScaleUpdate: (d) async {
+                    if (d.pointerCount < 2) return;
+                    final z =
+                        (_baseZoom * d.scale).clamp(_minZoom, _maxZoom);
+                    if ((z - _zoomLevel).abs() > 0.05) {
+                      setState(() => _zoomLevel = z);
+                      try { await _ctrl!.setZoomLevel(z); } catch (_) {}
+                    }
+                  },
+                  onTapUp: (d) async {
+                    // Normalize tap position within the preview frame
+                    final localPos = d.localPosition;
+                    final x = (localPos.dx / constraints.maxWidth)
+                        .clamp(0.0, 1.0);
+                    final y = (localPos.dy / constraints.maxHeight)
+                        .clamp(0.0, 1.0);
+                    try {
+                      await _ctrl!.setFocusMode(FocusMode.auto);
+                      await _ctrl!.setFocusPoint(Offset(x, y));
+                      await _ctrl!.setExposurePoint(Offset(x, y));
+                    } catch (_) {}
+                    setState(() { _focusPoint = localPos; _showFocus = true; });
+                    Future.delayed(const Duration(milliseconds: 1200), () {
+                      if (mounted) setState(() => _showFocus = false);
+                    });
+                  },
+                  child: CameraPreview(_ctrl!),
+                ),
+                // Rule-of-thirds composition grid
+                if (_showGrid)
+                  IgnorePointer(
+                    child: CustomPaint(
+                        painter: _GridPainter(opacity: 0.30),
+                        size: Size.infinite),
+                  ),
+                // Focus indicator square
+                if (_showFocus && _focusPoint != null)
+                  Positioned(
+                    left: _focusPoint!.dx - 28,
+                    top: _focusPoint!.dy - 28,
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _showFocus ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 150),
+                        child: Container(
+                          width: 56, height: 56,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                                color: AppColors.primaryContainer,
+                                width: 1.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
+              ],
             ),
-        ],
+          ),
+        ),
       );
     }
     return Container(
